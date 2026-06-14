@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 // ─── Security Utilities ──────────────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ function validatePassword(pw = "") {
   const score = Object.values(checks).filter(Boolean).length;
   const strength = score <= 2 ? "weak" : score <= 3 ? "fair" : score <= 4 ? "good" : "strong";
   const color    = { weak:"#E87060", fair:"#E8C460", good:"#A0C4E8", strong:"#A0E8A0" }[strength];
-  const valid    = checks.length && score >= 3;
+  const valid    = Object.values(checks).every(Boolean);
   return { checks, score, strength, color, valid };
 }
 
@@ -182,8 +182,8 @@ function Btn({ children, onClick, style={}, variant="outline", disabled=false })
 }
 function Sheet({ children, onClose, title, subtitle }) {
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#161616",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:"420px",padding:"0 24px 52px",border:"1px solid rgba(255,255,255,0.1)",borderBottom:"none",maxHeight:"92vh",overflowY:"auto"}}>
+    <div className="modal-overlay" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div className="bottom-sheet" onClick={e=>e.stopPropagation()} style={{background:"#161616",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:"420px",padding:"0 24px 52px",border:"1px solid rgba(255,255,255,0.1)",borderBottom:"none",maxHeight:"92vh",overflowY:"auto"}}>
         <div style={{position:"sticky",top:0,background:"#161616",paddingTop:16,paddingBottom:12,zIndex:1}}>
           <div style={{width:36,height:4,background:"rgba(255,255,255,0.15)",borderRadius:2,margin:"0 auto 16px"}}/>
           {title && <div style={{fontSize:"19px",fontFamily:"'Playfair Display',serif",fontWeight:700}}>{title}</div>}
@@ -253,7 +253,7 @@ const LEGAL_DOCS = {
 function LegalDocViewer({ docKey, onClose }) {
   const doc = LEGAL_DOCS[docKey];
   return (
-    <div style={{position:"fixed",inset:0,background:"#0D0D0D",zIndex:300,display:"flex",flexDirection:"column",maxWidth:"420px",margin:"0 auto"}}>
+    <div className="legal-viewer" style={{position:"fixed",inset:0,background:"#0D0D0D",zIndex:300,display:"flex",flexDirection:"column",maxWidth:"420px",margin:"0 auto"}}>
       {/* Header */}
       <div style={{padding:"52px 24px 16px",background:"rgba(13,13,13,0.98)",borderBottom:"1px solid rgba(255,255,255,0.07)",flexShrink:0}}>
         <button onClick={onClose} style={{background:"none",border:"none",color:"#E8C4A0",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",padding:0,marginBottom:12}}>← Back</button>
@@ -286,7 +286,6 @@ function ConsentScreen({ onComplete }) {
   const [agreed, setAgreed] = useState({ terms: false, privacy: false, cookies: false });
   const [viewingDoc, setViewingDoc] = useState(null);
   const [locationChoice, setLocationChoice] = useState(null);   // null | "yes" | "no"
-  const [notifChoice, setNotifChoice] = useState(null);         // null | "yes" | "no"
   const [step, setStep] = useState("legal"); // legal | location | notifications | done
 
   const allAgreed = agreed.terms && agreed.privacy && agreed.cookies;
@@ -294,7 +293,7 @@ function ConsentScreen({ onComplete }) {
   if (viewingDoc) return <LegalDocViewer docKey={viewingDoc} onClose={()=>setViewingDoc(null)}/>;
 
   if (step === "location") return (
-    <div style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px"}}>
+    <div className="onboarding-shell" style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px"}}>
       <div style={{textAlign:"center",marginBottom:32}}>
         <div style={{fontSize:56,marginBottom:16}}>📍</div>
         <div style={{fontSize:22,fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:8}}>Allow location?</div>
@@ -323,7 +322,7 @@ function ConsentScreen({ onComplete }) {
   );
 
   if (step === "notifications") return (
-    <div style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px"}}>
+    <div className="onboarding-shell" style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px"}}>
       <div style={{textAlign:"center",marginBottom:32}}>
         <div style={{fontSize:56,marginBottom:16}}>🔔</div>
         <div style={{fontSize:22,fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:8}}>Stay in the loop?</div>
@@ -345,15 +344,15 @@ function ConsentScreen({ onComplete }) {
       </div>
       <div style={{fontSize:11,color:"#555",textAlign:"center",marginBottom:16,lineHeight:1.6}}>You can manage notification preferences any time in Profile → Notifications</div>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <button onClick={()=>{setNotifChoice("yes");onComplete({location:locationChoice,notifications:"yes"});}} style={{padding:"14px",borderRadius:24,background:"linear-gradient(135deg,#E8C4A0,#C4A070)",border:"none",color:"#1A1A1A",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Turn on notifications</button>
-        <button onClick={()=>{setNotifChoice("no");onComplete({location:locationChoice,notifications:"no"});}} style={{padding:"14px",borderRadius:24,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"#888",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Not now</button>
+        <button onClick={()=>onComplete({location:locationChoice,notifications:"yes"})} style={{padding:"14px",borderRadius:24,background:"linear-gradient(135deg,#E8C4A0,#C4A070)",border:"none",color:"#1A1A1A",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Turn on notifications</button>
+        <button onClick={()=>onComplete({location:locationChoice,notifications:"no"})} style={{padding:"14px",borderRadius:24,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"#888",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Not now</button>
       </div>
     </div>
   );
 
   // Default: legal consent step
   return (
-    <div style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column"}}>
+    <div className="onboarding-shell" style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column"}}>
       <div style={{flex:1,padding:"52px 28px 24px",overflowY:"auto"}}>
         <div style={{fontSize:26,fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:4}}>Before you start<span style={{color:"#E8C4A0"}}>.</span></div>
         <div style={{fontSize:13,color:"#777",marginBottom:28,lineHeight:1.6}}>Please read and agree to our policies. Tap each one to read it in full.</div>
@@ -490,7 +489,7 @@ function Onboarding({ onComplete }) {
       <div style={{fontSize:12,color:"#666",marginBottom:24}}>How many books would you like to read this year?</div>
       <div style={{textAlign:"center",marginBottom:28}}>
         <div style={{fontSize:72,fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#E8C4A0",lineHeight:1}}>{data.goal}</div>
-        <div style={{fontSize:13,color:"#666",marginTop:4}}>books in 2025</div>
+        <div style={{fontSize:13,color:"#666",marginTop:4}}>books in {new Date().getFullYear()}</div>
         <div style={{display:"flex",gap:12,justifyContent:"center",marginTop:20}}>
           {[6,12,24,52].map(n=>(
             <button key={n} onClick={()=>setData(p=>({...p,goal:n}))} style={{padding:"8px 16px",borderRadius:20,fontSize:12,border:`1px solid ${data.goal===n?"rgba(232,196,160,0.5)":"rgba(255,255,255,0.1)"}`,background:data.goal===n?"rgba(232,196,160,0.12)":"rgba(255,255,255,0.04)",color:data.goal===n?"#E8C4A0":"#888",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{n}</button>
@@ -502,7 +501,7 @@ function Onboarding({ onComplete }) {
   ];
 
   return (
-    <div style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column"}}>
+    <div className="onboarding-shell" style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column"}}>
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet"/>
       {/* Progress bar */}
       {step > 0 && (
@@ -526,8 +525,8 @@ function BookDetailSheet({ book, onClose }) {
   const [tab, setTab] = useState("about");
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#161616",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:"420px",border:"1px solid rgba(255,255,255,0.1)",borderBottom:"none",maxHeight:"90vh",overflowY:"auto"}}>
+    <div className="modal-overlay" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div className="bottom-sheet book-detail-sheet" onClick={e=>e.stopPropagation()} style={{background:"#161616",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:"420px",border:"1px solid rgba(255,255,255,0.1)",borderBottom:"none",maxHeight:"90vh",overflowY:"auto"}}>
         {/* Hero */}
         <div style={{background:`linear-gradient(180deg,${book.cover}44 0%,#161616 100%)`,padding:"28px 24px 0",position:"relative"}}>
           <div style={{width:36,height:4,background:"rgba(255,255,255,0.15)",borderRadius:2,margin:"0 auto 20px"}}/>
@@ -876,17 +875,20 @@ function AIRecsSheet({ books, onClose }) {
   const [loading, setLoading] = useState(true);
   const [recs, setRecs] = useState(null);
   const [error, setError] = useState(null);
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError(null); setRecs(null);
     const topBooks = books.slice(0,5).map(b=>`"${b.title}" by ${b.author} (${b.genre}, rated ${b.rating}/5)`).join(", ");
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Based on these books I've loved: ${topBooks}\n\nRecommend 4 books I'd enjoy next. Reply ONLY with a JSON array (no markdown):\n[{"title":"...","author":"...","genre":"...","why":"One warm sentence on why I'd love this","emoji":"📚"}]`}]})});
       const data = await res.json();
       setRecs(JSON.parse(data.content.map(c=>c.text||"").join("").replace(/```json|```/g,"").trim()));
-    } catch(e) { setError("Couldn't load recommendations. Try again!"); }
+    } catch { setError("Couldn't load recommendations. Try again!"); }
     setLoading(false);
-  };
-  useEffect(()=>{load();},[]);
+  }, [books]);
+  useEffect(()=>{
+    const timer = setTimeout(load, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
   return (
     <Sheet onClose={onClose} title="Your Next Read ✨" subtitle="AI picks tailored to your shelf">
       {loading&&<div style={{textAlign:"center",padding:"40px 0"}}><div style={{fontSize:36,marginBottom:12,display:"inline-block",animation:"spin 2s linear infinite"}}>📚</div><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style><div style={{fontSize:13,color:"#666"}}>Analysing your reading taste…</div></div>}
@@ -909,7 +911,7 @@ function YearReview({ books, onClose }) {
         <div style={{background:"linear-gradient(145deg,#0E1A14 0%,#1A1A2E 55%,#16213E 100%)",borderRadius:24,padding:"30px 26px",border:"1px solid rgba(255,255,255,0.1)",position:"relative",overflow:"hidden"}}>
           <div style={{position:"absolute",top:-50,right:-50,width:220,height:220,borderRadius:"50%",background:"radial-gradient(circle,rgba(232,196,160,0.07),transparent 70%)",pointerEvents:"none"}}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:22}}>
-            <div><div style={{fontSize:12,color:"#E8C4A0",textTransform:"uppercase",letterSpacing:"2.5px",fontFamily:"'DM Sans',sans-serif"}}>book nook</div><div style={{fontSize:22,fontFamily:"'Playfair Display',serif",fontWeight:700,marginTop:4,lineHeight:1.2}}>My 2024<br/>in Books</div></div>
+            <div><div style={{fontSize:12,color:"#E8C4A0",textTransform:"uppercase",letterSpacing:"2.5px",fontFamily:"'DM Sans',sans-serif"}}>book nook</div><div style={{fontSize:22,fontFamily:"'Playfair Display',serif",fontWeight:700,marginTop:4,lineHeight:1.2}}>My {new Date().getFullYear()}<br/>in Books</div></div>
             <div style={{textAlign:"right"}}><div style={{fontSize:44,fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#E8C4A0",lineHeight:1}}>{total}</div><div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:"1px"}}>books read</div></div>
           </div>
           <div style={{height:1,background:"linear-gradient(90deg,rgba(232,196,160,0.25),transparent)",marginBottom:20}}/>
@@ -1015,7 +1017,6 @@ function NearbyMapView({ listings, onOffer, myOffers }) {
 export default function BookNook() {
   const [authed, setAuthed] = useState(false);
   const [consented, setConsented] = useState(false);
-  const [permissions, setPermissions] = useState(null);
   const [user, setUser] = useState(null);
   const [tab, setTab] = useState("discover");
   const [modal, setModal] = useState(null);
@@ -1035,9 +1036,10 @@ export default function BookNook() {
   const [animated, setAnimated] = useState(false);
 
   useEffect(()=>{ const t=setTimeout(()=>setAnimated(true),80); return()=>clearTimeout(t); },[]);
+  useEffect(()=>{ window.scrollTo({top:0,left:0,behavior:"auto"}); },[tab]);
 
   if (!authed) return <Onboarding onComplete={data=>{ setUser({...data, location: fuzzyLocation(data.location)}); setAuthed(true); }}/>;
-  if (!consented) return <ConsentScreen onComplete={perms=>{ setPermissions(perms); setConsented(true); }}/>;
+  if (!consented) return <ConsentScreen onComplete={()=>setConsented(true)}/>;
 
   const totalPages = books.reduce((a,b)=>a+b.read,0);
   const pct = Math.round((CURRENT_BOOK.read/CURRENT_BOOK.pages)*100);
@@ -1051,11 +1053,11 @@ export default function BookNook() {
   ];
 
   return (
-    <div style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",position:"relative",overflowX:"hidden"}}>
+    <div className="book-nook-app" style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",position:"relative",overflowX:"hidden"}}>
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet"/>
 
       {/* Header */}
-      <div style={{padding:"52px 24px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:"rgba(13,13,13,0.96)",backdropFilter:"blur(16px)",zIndex:10}}>
+      <div className="app-header" style={{padding:"52px 24px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:"rgba(13,13,13,0.96)",backdropFilter:"blur(16px)",zIndex:10}}>
         <div style={{fontSize:"24px",fontFamily:"'Playfair Display',serif",fontWeight:700,letterSpacing:"-0.5px"}}>book nook<span style={{color:"#E8C4A0"}}>.</span></div>
         <div style={{display:"flex",gap:10,alignItems:"center"}}>
           <button onClick={()=>setModal("ai")} style={{background:"rgba(232,196,160,0.08)",border:"1px solid rgba(232,196,160,0.22)",borderRadius:20,padding:"6px 13px",color:"#E8C4A0",fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>✨ For You</button>
@@ -1066,7 +1068,7 @@ export default function BookNook() {
       </div>
 
       {/* Tab bar */}
-      <div style={{display:"flex",gap:0,margin:"0 24px 0",background:"rgba(255,255,255,0.04)",borderRadius:14,padding:"4px",position:"sticky",top:68,zIndex:10,backdropFilter:"blur(12px)"}}>
+      <div className="app-tabs" style={{display:"flex",gap:0,margin:"0 24px 0",background:"rgba(13,13,13,0.96)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:14,padding:"4px",position:"sticky",top:98,zIndex:10,backdropFilter:"blur(12px)"}}>
         {tabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"8px 0",borderRadius:11,border:"none",cursor:"pointer",background:tab===t.id?"rgba(232,196,160,0.13)":"transparent",color:tab===t.id?"#E8C4A0":"#555",fontSize:"11px",fontWeight:tab===t.id?500:400,transition:"all 0.2s",fontFamily:"'DM Sans',sans-serif",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
             <span style={{fontSize:14}}>{t.icon}</span>{t.label}
@@ -1074,7 +1076,7 @@ export default function BookNook() {
         ))}
       </div>
 
-      <div style={{padding:"16px 24px 120px",opacity:animated?1:0,transition:"opacity 0.35s"}}>
+      <div className="app-content" style={{minHeight:"calc(100vh - 150px)",padding:"16px 24px 120px",opacity:animated?1:0,transition:"opacity 0.35s"}}>
 
         {/* ── DISCOVER ── */}
         {tab==="discover" && (
@@ -1171,7 +1173,7 @@ export default function BookNook() {
         {tab==="stats" && (
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <SectionHead>2024 in review</SectionHead>
+              <SectionHead>{new Date().getFullYear()} in review</SectionHead>
               <button onClick={()=>setModal("review")} style={{background:"linear-gradient(135deg,#E8C4A0,#C4A070)",border:"none",borderRadius:20,padding:"6px 14px",color:"#1A1A1A",fontSize:11,cursor:"pointer",fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>Share card ✨</button>
             </div>
             {/* Reading goal */}
@@ -1321,7 +1323,7 @@ export default function BookNook() {
       )}
       {selectedBook     && <BookDetailSheet book={selectedBook} onClose={()=>setSelectedBook(null)}/>}
 
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"420px",height:1,background:"linear-gradient(90deg,transparent,rgba(232,196,160,0.12),transparent)"}}/>
+      <div className="bottom-accent" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"420px",height:1,background:"linear-gradient(90deg,transparent,rgba(232,196,160,0.12),transparent)"}}/>
     </div>
   );
 }
