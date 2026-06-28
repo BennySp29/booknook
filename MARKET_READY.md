@@ -11,10 +11,12 @@ Book Nook is moving from prototype toward a testable market-ready product. This 
 - Under-13 signup block because verifiable parental consent is not implemented.
 - PWA/home-screen manifest and service worker update path for testers.
 - Visible app version/test build marker.
+- Persistent backend storage using SQL tables, with local SQLite for development and Postgres through `BOOKNOOK_DATABASE_URL`/`DATABASE_URL` for hosted environments.
 
 ## Before External Beta
 
-- Replace in-memory backend storage with a database, migrations, backup/restore, and deletion jobs.
+- Choose a non-expiring production database plan/provider. Render Free Postgres expires after 30 days and is not suitable for real user data.
+- Add database migrations, backup/restore testing, and deletion/retention jobs.
 - Add automated backend tests for auth, access control, export/delete, rate limits, and validation.
 - Add frontend flow tests for signup, consent, shelf, exchange, export/delete, and installed-app update behavior.
 - Add production HTTPS deployment with managed secrets and environment-specific CORS/host values.
@@ -40,5 +42,6 @@ Book Nook is moving from prototype toward a testable market-ready product. This 
 1. Bump `APP_VERSION` in [src/release.js](src/release.js) and `CACHE_VERSION` in [public/sw.js](public/sw.js).
 2. Run `npm.cmd run build` and `npm.cmd run lint`.
 3. Run backend compile and API smoke tests.
-4. Deploy frontend and backend together.
-5. Ask testers with home-screen installs to open Book Nook once; the service worker checks for updates and reloads after the new version activates.
+4. Deploy backend with durable `BOOKNOOK_DATABASE_URL`/`DATABASE_URL` and production CORS/host settings.
+5. Deploy frontend with `VITE_API_BASE_URL` pointing at the backend.
+6. Ask testers with home-screen installs to open Book Nook once; the service worker checks for updates and reloads after the new version activates.

@@ -1,6 +1,6 @@
 # Security and Data Protection
 
-Book Nook is currently a local prototype. The app now includes baseline defensive controls, but it should not be used with real personal data until a production data store, deployment, and privacy process are in place.
+Book Nook is currently a tester-stage prototype. The app now includes baseline defensive controls and persistent database storage, but it should not be used with real personal data until a production deployment, backup process, and privacy process are in place.
 
 ## Implemented Controls
 
@@ -12,6 +12,8 @@ Book Nook is currently a local prototype. The app now includes baseline defensiv
 - Request bodies are size-limited with `BOOKNOOK_MAX_REQUEST_BYTES`.
 - CORS and trusted hosts are restricted by environment variables.
 - API responses include defensive security headers and `Cache-Control: no-store`.
+- App data is stored in SQL database tables instead of process memory.
+- The backend supports managed Postgres through `BOOKNOOK_DATABASE_URL` or `DATABASE_URL`, with SQLite reserved for local development.
 - Location is normalized to city-level data during registration.
 - Frontend auth tokens are kept in `sessionStorage`, with cleanup of older `localStorage` tokens.
 - Account export and deletion endpoints are implemented for the prototype data store.
@@ -25,6 +27,7 @@ Use these settings in production-like environments:
 ```text
 BOOKNOOK_ALLOWED_ORIGINS=https://your-frontend.example
 BOOKNOOK_ALLOWED_HOSTS=api.your-domain.example
+BOOKNOOK_DATABASE_URL=postgresql://user:password@host:5432/booknook
 BOOKNOOK_SESSION_TTL_MINUTES=120
 BOOKNOOK_MAX_REQUEST_BYTES=65536
 BOOKNOOK_RATE_LIMIT_MAX=90
@@ -36,7 +39,8 @@ BOOKNOOK_ENABLE_DOCS=0
 
 ## Required Before Real Users
 
-- Replace in-memory data with a managed database using encryption at rest, migrations, backups, and least-privilege credentials.
+- Use a non-expiring managed production database with encryption at rest, backups, restore testing, and least-privilege credentials. Do not launch on Render Free Postgres because it expires after 30 days.
+- Add database migrations before schema changes become frequent.
 - Serve only over HTTPS and put secure proxy headers in front of the API.
 - Move browser auth to secure, httpOnly, SameSite cookies or another reviewed auth pattern.
 - Add CSRF protection if cookie auth is introduced.

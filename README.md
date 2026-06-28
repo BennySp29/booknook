@@ -32,6 +32,14 @@ uvicorn main:app --reload --port 8000
 
 The API runs at `http://localhost:8000`. The frontend defaults to that URL, or you can override it with `VITE_API_BASE_URL`.
 
+By default the backend uses a local SQLite database at `backend/booknook.db` for development. For hosted use, set a Postgres connection string with either `BOOKNOOK_DATABASE_URL` or `DATABASE_URL`.
+
+```bash
+set BOOKNOOK_DATABASE_URL=postgresql://user:password@host:5432/booknook
+```
+
+Do not use an expiring free database for production or real personal data. Render's free Postgres tier expires after 30 days, so production should use a paid managed database with backups or another managed Postgres provider with durable storage.
+
 ## Current API Surface
 
 - `POST /auth/register`
@@ -48,7 +56,7 @@ The API runs at `http://localhost:8000`. The frontend defaults to that URL, or y
 - `POST /reports`
 - `POST /recommendations`
 
-Data is currently stored in memory so the app is easy to run locally without a database.
+Data is stored in database tables. Local development uses SQLite; production should use managed Postgres.
 
 ## Security Notes
 
@@ -59,6 +67,7 @@ Common environment overrides:
 ```bash
 set BOOKNOOK_ALLOWED_ORIGINS=http://localhost:5173
 set BOOKNOOK_ALLOWED_HOSTS=localhost,127.0.0.1
+set BOOKNOOK_DATABASE_URL=postgresql://user:password@host:5432/booknook
 set BOOKNOOK_SESSION_TTL_MINUTES=480
 set BOOKNOOK_ENABLE_DOCS=1
 ```

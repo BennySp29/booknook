@@ -5,16 +5,27 @@ import os
 import secrets
 import time
 from collections import defaultdict, deque
-from copy import deepcopy
-from datetime import timedelta, timezone, datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import delete, or_, select
+from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 try:
+    from .database import (
+        BookRow,
+        ListingRow,
+        OfferRow,
+        ReportRow,
+        UserRow,
+        UserSessionRow,
+        get_db,
+        init_db,
+    )
     from .models import (
         BookCreate,
         ListingCreate,
@@ -25,6 +36,16 @@ try:
         UserRegister,
     )
 except ImportError:
+    from database import (
+        BookRow,
+        ListingRow,
+        OfferRow,
+        ReportRow,
+        UserRow,
+        UserSessionRow,
+        get_db,
+        init_db,
+    )
     from models import (
         BookCreate,
         ListingCreate,
@@ -51,7 +72,12 @@ FAILED_LOGIN_LIMIT = int(os.getenv("BOOKNOOK_FAILED_LOGIN_LIMIT", "5"))
 LOGIN_LOCKOUT_SECONDS = int(os.getenv("BOOKNOOK_LOGIN_LOCKOUT_SECONDS", "900"))
 
 
-app = FastAPI(title="BookNook API", version="0.3.0", docs_url="/docs" if os.getenv("BOOKNOOK_ENABLE_DOCS") == "1" else None, redoc_url=None)
+app = FastAPI(
+    title="BookNook API",
+    version="0.4.0",
+    docs_url="/docs" if os.getenv("BOOKNOOK_ENABLE_DOCS") == "1" else None,
+    redoc_url=None,
+)
 
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
@@ -69,6 +95,12 @@ failed_logins: dict[str, dict[str, Any]] = defaultdict(lambda: {"count": 0, "loc
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def client_ip(request: Request) -> str:
@@ -110,7 +142,6 @@ async def protect_requests(request: Request, call_next):
 
 BOOK_SEED = [
     {
-        "id": 1,
         "title": "The Midnight Library",
         "author": "Matt Haig",
         "cover": "#2D4A3E",
@@ -120,9 +151,9 @@ BOOK_SEED = [
         "rating": 5,
         "month": 1,
         "review": "A gorgeous meditation on regret and possibility.",
+        "status": "read",
     },
     {
-        "id": 2,
         "title": "Atomic Habits",
         "author": "James Clear",
         "cover": "#8B4513",
@@ -132,9 +163,9 @@ BOOK_SEED = [
         "rating": 5,
         "month": 2,
         "review": "Changed how I think about building routines.",
+        "status": "read",
     },
     {
-        "id": 3,
         "title": "Dune",
         "author": "Frank Herbert",
         "cover": "#C4922A",
@@ -144,9 +175,9 @@ BOOK_SEED = [
         "rating": 4,
         "month": 3,
         "review": "Epic world-building, slow start but worth it.",
+        "status": "read",
     },
     {
-        "id": 4,
         "title": "Project Hail Mary",
         "author": "Andy Weir",
         "cover": "#1A2A4A",
@@ -156,12 +187,12 @@ BOOK_SEED = [
         "rating": 5,
         "month": 8,
         "review": "The most fun I've had reading in years.",
+        "status": "read",
     },
 ]
 
 LISTING_SEED = [
     {
-        "id": 1,
         "type": "give",
         "book": "Lessons in Chemistry",
         "author": "Bonnie Garmus",
@@ -175,11 +206,9 @@ LISTING_SEED = [
         "lng": -0.055,
         "canPost": True,
         "note": "Loved it, hoping it goes to a good home.",
-        "offers": [],
         "time": "1h ago",
     },
     {
-        "id": 2,
         "type": "trade",
         "wantGenre": "Sci-Fi",
         "wantSpecific": "anything by Kim Stanley Robinson",
@@ -195,11 +224,9 @@ LISTING_SEED = [
         "lng": -2.242,
         "canPost": True,
         "note": "Obsessed with KSR lately.",
-        "offers": [],
         "time": "3h ago",
     },
     {
-        "id": 3,
         "type": "open",
         "book": "The Thursday Murder Club",
         "author": "Richard Osman",
@@ -213,17 +240,9 @@ LISTING_SEED = [
         "lng": -2.587,
         "canPost": False,
         "note": "Open to anything - surprise me!",
-        "offers": [],
         "time": "5h ago",
     },
 ]
-
-users_by_email: dict[str, dict[str, Any]] = {}
-sessions: dict[str, dict[str, Any]] = {}
-books_by_user: dict[str, list[dict[str, Any]]] = {}
-listings: list[dict[str, Any]] = deepcopy(LISTING_SEED)
-reports: list[dict[str, Any]] = []
-next_ids = {"user": 1, "book": 100, "listing": 100, "offer": 100}
 
 CITY_COORDS = {
     "brighton": (50.827, -0.137),
@@ -235,26 +254,92 @@ CITY_COORDS = {
 }
 
 
-def public_user(user: dict[str, Any]) -> dict[str, Any]:
+@app.on_event("startup")
+def startup() -> None:
+    init_db(LISTING_SEED)
+
+
+def public_user(user: UserRow) -> dict[str, Any]:
     return {
-        "id": user["id"],
-        "name": user["name"],
-        "email": user["email"],
-        "location": user.get("location"),
-        "genres": user.get("genres", []),
-        "goal": user.get("goal", 12),
-        "avatar": user.get("avatar", "📚"),
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "location": user.location,
+        "genres": user.genres or [],
+        "goal": user.goal,
+        "avatar": user.avatar,
     }
 
 
-def public_offer(offer: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in offer.items() if key != "userId"}
+def public_offer(offer: OfferRow) -> dict[str, Any]:
+    return {
+        "id": offer.id,
+        "user": offer.user,
+        "userBg": offer.user_bg,
+        "bookOffer": offer.book_offer,
+        "message": offer.message,
+        "createdAt": offer.created_at.isoformat(),
+    }
 
 
-def public_listing(listing: dict[str, Any]) -> dict[str, Any]:
-    safe = {key: value for key, value in listing.items() if key != "ownerId"}
-    safe["offers"] = [public_offer(offer) for offer in listing.get("offers", [])]
-    return safe
+def export_offer(offer: OfferRow) -> dict[str, Any]:
+    return public_offer(offer)
+
+
+def export_offer_groups(offers: list[OfferRow]) -> list[dict[str, Any]]:
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for offer in offers:
+        grouped.setdefault(offer.listing_id, []).append(export_offer(offer))
+    return [{"listingId": listing_id, "offers": grouped[listing_id]} for listing_id in grouped]
+
+
+def public_listing(listing: ListingRow) -> dict[str, Any]:
+    return {
+        "id": listing.id,
+        "type": listing.type,
+        "wantGenre": listing.want_genre,
+        "wantSpecific": listing.want_specific,
+        "book": listing.book,
+        "author": listing.author,
+        "genre": listing.genre,
+        "condition": listing.condition,
+        "owner": listing.owner,
+        "ownerBg": listing.owner_bg,
+        "ownerKarma": listing.owner_karma,
+        "location": listing.location,
+        "lat": listing.lat,
+        "lng": listing.lng,
+        "canPost": listing.can_post,
+        "note": listing.note,
+        "offers": [public_offer(offer) for offer in listing.offers],
+        "time": listing.time,
+    }
+
+
+def public_book(book: BookRow) -> dict[str, Any]:
+    return {
+        "id": book.id,
+        "title": book.title,
+        "author": book.author,
+        "cover": book.cover,
+        "pages": book.pages,
+        "read": book.read,
+        "genre": book.genre,
+        "rating": book.rating,
+        "month": book.month,
+        "review": book.review,
+        "status": book.status,
+    }
+
+
+def export_report(report: ReportRow) -> dict[str, Any]:
+    return {
+        "id": report.id,
+        "contentId": report.content_id,
+        "reason": report.reason,
+        "type": report.type,
+        "createdAt": report.created_at.isoformat(),
+    }
 
 
 def hash_password(password: str, salt: str | None = None) -> str:
@@ -272,33 +357,39 @@ def token_digest(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def create_session(email: str) -> str:
+def create_session(db: Session, user: UserRow) -> str:
     token = secrets.token_urlsafe(32)
-    sessions[token_digest(token)] = {
-        "email": email,
-        "expiresAt": utc_now() + timedelta(minutes=SESSION_TTL_MINUTES),
-    }
+    db.add(
+        UserSessionRow(
+            token_hash=token_digest(token),
+            user_id=user.id,
+            expires_at=utc_now() + timedelta(minutes=SESSION_TTL_MINUTES),
+        )
+    )
+    db.commit()
     return token
 
 
-def current_user(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+def current_user(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> UserRow:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing bearer token")
     token = authorization.split(" ", 1)[1]
     session_key = token_digest(token)
-    session = sessions.get(session_key)
-    if not session or session["expiresAt"] <= utc_now():
-        sessions.pop(session_key, None)
+    session = db.get(UserSessionRow, session_key)
+    if not session or as_utc(session.expires_at) <= utc_now():
+        if session:
+            db.delete(session)
+            db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
-    user = users_by_email.get(session["email"])
+    user = db.get(UserRow, session.user_id)
     if not user:
+        db.delete(session)
+        db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
     return user
-
-
-def now_id(kind: str) -> int:
-    next_ids[kind] += 1
-    return next_ids[kind]
 
 
 def assert_not_locked(email: str) -> None:
@@ -318,16 +409,38 @@ def clear_failed_login(email: str) -> None:
     failed_logins.pop(email, None)
 
 
-def revoke_session(authorization: str | None) -> None:
+def revoke_session(db: Session, authorization: str | None) -> None:
     if not authorization or not authorization.lower().startswith("bearer "):
         return
     token = authorization.split(" ", 1)[1]
-    sessions.pop(token_digest(token), None)
+    session = db.get(UserSessionRow, token_digest(token))
+    if session:
+        db.delete(session)
+        db.commit()
 
 
 def coarse_coords(location: str) -> tuple[float, float]:
     key = (location or "").strip().lower()
     return CITY_COORDS.get(key, (51.5, -0.12))
+
+
+def seed_books_for_user(db: Session, user: UserRow) -> None:
+    for item in BOOK_SEED:
+        db.add(
+            BookRow(
+                user_id=user.id,
+                title=item["title"],
+                author=item["author"],
+                cover=item["cover"],
+                pages=item["pages"],
+                read=item["read"],
+                genre=item["genre"],
+                rating=item["rating"],
+                month=item["month"],
+                review=item["review"],
+                status=item["status"],
+            )
+        )
 
 
 @app.get("/")
@@ -341,130 +454,176 @@ def health() -> dict[str, str]:
 
 
 @app.post("/auth/register")
-def register(payload: UserRegister) -> dict[str, Any]:
-    if payload.email in users_by_email:
+def register(payload: UserRegister, db: Session = Depends(get_db)) -> dict[str, Any]:
+    existing_user = db.scalar(select(UserRow).where(UserRow.email == payload.email))
+    if existing_user:
         raise HTTPException(status.HTTP_409_CONFLICT, "An account already exists for this email")
 
-    user = {
-        "id": now_id("user"),
-        "name": payload.name.strip(),
-        "email": payload.email,
-        "passwordHash": hash_password(payload.password),
-        "location": (payload.location or "").strip(),
-        "genres": payload.genres,
-        "goal": payload.goal,
-        "avatar": payload.avatar,
-        "createdAt": utc_now().isoformat(),
-    }
-    users_by_email[user["email"]] = user
-    books_by_user[user["email"]] = deepcopy(BOOK_SEED)
-    return {"token": create_session(user["email"]), "user": public_user(user)}
+    user = UserRow(
+        name=payload.name.strip(),
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+        location=(payload.location or "").strip(),
+        genres=payload.genres,
+        goal=payload.goal,
+        avatar=payload.avatar,
+        created_at=utc_now(),
+    )
+    db.add(user)
+    db.flush()
+    seed_books_for_user(db, user)
+    db.commit()
+    db.refresh(user)
+    return {"token": create_session(db, user), "user": public_user(user)}
 
 
 @app.post("/auth/login")
-def login(payload: UserLogin) -> dict[str, Any]:
+def login(payload: UserLogin, db: Session = Depends(get_db)) -> dict[str, Any]:
     assert_not_locked(payload.email)
-    user = users_by_email.get(payload.email)
-    if not user or not verify_password(payload.password, user["passwordHash"]):
+    user = db.scalar(select(UserRow).where(UserRow.email == payload.email))
+    if not user or not verify_password(payload.password, user.password_hash):
         record_failed_login(payload.email)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
     clear_failed_login(payload.email)
-    return {"token": create_session(user["email"]), "user": public_user(user)}
+    return {"token": create_session(db, user), "user": public_user(user)}
 
 
 @app.post("/auth/logout")
-def logout(authorization: str | None = Header(default=None)) -> dict[str, bool]:
-    revoke_session(authorization)
+def logout(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> dict[str, bool]:
+    revoke_session(db, authorization)
     return {"ok": True}
 
 
 @app.get("/me")
-def me(user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
+def me(user: UserRow = Depends(current_user)) -> dict[str, Any]:
     return {"user": public_user(user)}
 
 
 @app.get("/me/export")
-def export_me(user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
-    owned_listing_ids = {listing["id"] for listing in listings if listing.get("ownerId") == user["id"]}
-    visible_offers = []
-    for listing in listings:
-        if listing["id"] in owned_listing_ids:
-            offers = listing.get("offers", [])
-        else:
-            offers = [offer for offer in listing.get("offers", []) if offer.get("userId") == user["id"]]
-        if offers:
-            visible_offers.append({"listingId": listing["id"], "offers": [public_offer(offer) for offer in offers]})
+def export_me(user: UserRow = Depends(current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    owned_listings = db.scalars(
+        select(ListingRow)
+        .options(selectinload(ListingRow.offers))
+        .where(ListingRow.owner_id == user.id)
+        .order_by(ListingRow.created_at.desc())
+    ).all()
+    visible_offers = db.scalars(
+        select(OfferRow)
+        .join(OfferRow.listing)
+        .options(selectinload(OfferRow.listing))
+        .where(or_(OfferRow.user_id == user.id, ListingRow.owner_id == user.id))
+        .order_by(OfferRow.created_at.desc())
+    ).all()
+    books = db.scalars(select(BookRow).where(BookRow.user_id == user.id).order_by(BookRow.id)).all()
+    reports = db.scalars(select(ReportRow).where(ReportRow.reporter_id == user.id).order_by(ReportRow.id)).all()
     return {
         "user": public_user(user),
-        "books": books_by_user.get(user["email"], []),
-        "listings": [public_listing(listing) for listing in listings if listing.get("ownerId") == user["id"]],
-        "offers": visible_offers,
-        "reports": [report for report in reports if report.get("reporterId") == user["id"]],
+        "books": [public_book(book) for book in books],
+        "listings": [public_listing(listing) for listing in owned_listings],
+        "offers": export_offer_groups(list(visible_offers)),
+        "reports": [export_report(report) for report in reports],
     }
 
 
 @app.delete("/me")
-def delete_me(authorization: str | None = Header(default=None), user: dict[str, Any] = Depends(current_user)) -> dict[str, bool]:
-    email = user["email"]
-    users_by_email.pop(email, None)
-    books_by_user.pop(email, None)
-    for token, session in list(sessions.items()):
-        if session["email"] == email:
-            sessions.pop(token, None)
-    listings[:] = [listing for listing in listings if listing.get("ownerId") != user["id"]]
-    for listing in listings:
-        listing["offers"] = [offer for offer in listing.get("offers", []) if offer.get("userId") != user["id"]]
-    reports[:] = [report for report in reports if report.get("reporterId") != user["id"]]
-    revoke_session(authorization)
+def delete_me(
+    authorization: str | None = Header(default=None),
+    user: UserRow = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    db.execute(delete(UserSessionRow).where(UserSessionRow.user_id == user.id))
+    db.execute(delete(BookRow).where(BookRow.user_id == user.id))
+    db.execute(delete(OfferRow).where(OfferRow.user_id == user.id))
+    db.execute(delete(ReportRow).where(ReportRow.reporter_id == user.id))
+    db.execute(delete(ListingRow).where(ListingRow.owner_id == user.id))
+    db.delete(user)
+    db.commit()
+    revoke_session(db, authorization)
     return {"ok": True}
 
 
 @app.get("/bootstrap")
-def bootstrap(user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
+def bootstrap(user: UserRow = Depends(current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    books = db.scalars(select(BookRow).where(BookRow.user_id == user.id).order_by(BookRow.id)).all()
+    listings = db.scalars(
+        select(ListingRow).options(selectinload(ListingRow.offers)).order_by(ListingRow.created_at.desc(), ListingRow.id.desc())
+    ).all()
     return {
         "user": public_user(user),
-        "books": books_by_user.get(user["email"], []),
+        "books": [public_book(book) for book in books],
         "listings": [public_listing(listing) for listing in listings],
     }
 
 
 @app.get("/books")
-def list_books(user: dict[str, Any] = Depends(current_user)) -> list[dict[str, Any]]:
-    return books_by_user.get(user["email"], [])
+def list_books(user: UserRow = Depends(current_user), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    books = db.scalars(select(BookRow).where(BookRow.user_id == user.id).order_by(BookRow.id)).all()
+    return [public_book(book) for book in books]
 
 
 @app.post("/books")
-def add_book(payload: BookCreate, user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
-    book = payload.model_dump()
-    book["id"] = now_id("book")
-    book["read"] = book["read"] if book["read"] is not None else (book["pages"] if book["status"] == "read" else 0)
-    book["month"] = book["month"] or utc_now().month
-    books_by_user.setdefault(user["email"], []).append(book)
-    return book
+def add_book(payload: BookCreate, user: UserRow = Depends(current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    data = payload.model_dump()
+    read = data["read"] if data["read"] is not None else (data["pages"] if data["status"] == "read" else 0)
+    book = BookRow(
+        user_id=user.id,
+        title=data["title"],
+        author=data["author"],
+        cover=data["cover"],
+        pages=data["pages"],
+        read=read,
+        genre=data["genre"],
+        rating=data["rating"],
+        month=data["month"] or utc_now().month,
+        review=data["review"],
+        status=data["status"],
+    )
+    db.add(book)
+    db.commit()
+    db.refresh(book)
+    return public_book(book)
 
 
 @app.get("/listings")
-def list_market() -> list[dict[str, Any]]:
+def list_market(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    listings = db.scalars(
+        select(ListingRow).options(selectinload(ListingRow.offers)).order_by(ListingRow.created_at.desc(), ListingRow.id.desc())
+    ).all()
     return [public_listing(listing) for listing in listings]
 
 
 @app.post("/listings")
-def create_listing(payload: ListingCreate, user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
-    listing = payload.model_dump()
-    listing["location"] = (listing.get("location") or user.get("location") or "Your area").strip().split(",", 1)[0].strip()
-    listing["lat"], listing["lng"] = coarse_coords(listing["location"])
-    listing.update(
-        {
-            "id": now_id("listing"),
-            "ownerId": user["id"],
-            "owner": user["name"],
-            "ownerBg": "linear-gradient(135deg,#E8C4A0,#C4A070)",
-            "ownerKarma": 0,
-            "offers": [],
-            "time": "just now",
-        }
+def create_listing(
+    payload: ListingCreate,
+    user: UserRow = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    data = payload.model_dump()
+    location = (data.get("location") or user.location or "Your area").strip().split(",", 1)[0].strip()
+    lat, lng = coarse_coords(location)
+    listing = ListingRow(
+        type=data["type"],
+        want_genre=data.get("wantGenre"),
+        want_specific=data.get("wantSpecific"),
+        book=data["book"],
+        author=data["author"],
+        genre=data["genre"],
+        condition=data["condition"],
+        owner_id=user.id,
+        owner=user.name,
+        owner_bg="linear-gradient(135deg,#E8C4A0,#C4A070)",
+        owner_karma=0,
+        location=location,
+        lat=lat,
+        lng=lng,
+        can_post=data["canPost"],
+        note=data["note"],
+        time="just now",
+        created_at=utc_now(),
     )
-    listings.insert(0, listing)
+    db.add(listing)
+    db.commit()
+    db.refresh(listing)
     return public_listing(listing)
 
 
@@ -472,35 +631,45 @@ def create_listing(payload: ListingCreate, user: dict[str, Any] = Depends(curren
 def create_offer(
     listing_id: int,
     payload: OfferCreate,
-    user: dict[str, Any] = Depends(current_user),
+    user: UserRow = Depends(current_user),
+    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    for listing in listings:
-        if listing["id"] == listing_id:
-            offer = payload.model_dump()
-            offer.update(
-                {
-                    "id": now_id("offer"),
-                    "userId": user["id"],
-                    "user": user["name"],
-                    "userBg": "#E8C4A0",
-                    "createdAt": utc_now().isoformat(),
-                }
-            )
-            listing.setdefault("offers", []).append(offer)
-            return public_offer(offer)
-    raise HTTPException(status.HTTP_404_NOT_FOUND, "Listing not found")
+    listing = db.get(ListingRow, listing_id)
+    if not listing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Listing not found")
+    data = payload.model_dump()
+    offer = OfferRow(
+        listing_id=listing.id,
+        user_id=user.id,
+        user=user.name,
+        user_bg="#E8C4A0",
+        book_offer=data["bookOffer"],
+        message=data["message"],
+        created_at=utc_now(),
+    )
+    db.add(offer)
+    db.commit()
+    db.refresh(offer)
+    return public_offer(offer)
 
 
 @app.post("/reports")
-def create_report(payload: ReportCreate, user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
-    report = payload.model_dump()
-    report.update({"id": len(reports) + 1, "reporterId": user["id"], "createdAt": utc_now().isoformat()})
-    reports.append(report)
+def create_report(payload: ReportCreate, user: UserRow = Depends(current_user), db: Session = Depends(get_db)) -> dict[str, bool]:
+    data = payload.model_dump()
+    report = ReportRow(
+        reporter_id=user.id,
+        content_id=data["contentId"],
+        reason=data["reason"],
+        type=data["type"],
+        created_at=utc_now(),
+    )
+    db.add(report)
+    db.commit()
     return {"ok": True}
 
 
 @app.post("/recommendations")
-def recommendations(payload: RecommendationRequest, user: dict[str, Any] = Depends(current_user)) -> list[dict[str, str]]:
+def recommendations(payload: RecommendationRequest, user: UserRow = Depends(current_user)) -> list[dict[str, str]]:
     genres = [book.get("genre") for book in payload.books if book.get("genre")]
     favorite_genre = max(set(genres), key=genres.count) if genres else "Fiction"
     by_genre = {
@@ -521,11 +690,11 @@ def recommendations(payload: RecommendationRequest, user: dict[str, Any] = Depen
             ("Know My Name", "Chanel Miller", "A powerful memoir with extraordinary clarity."),
         ],
     }
-    picks = by_genre.get(favorite_genre, [
-        ("Tomorrow, and Tomorrow, and Tomorrow", "Gabrielle Zevin", "A layered novel about creativity, friendship, and ambition."),
-        ("The Covenant of Water", "Abraham Verghese", "A sweeping family story with huge emotional range."),
-    ])
-    return [
-        {"title": title, "author": author, "genre": favorite_genre, "why": why, "emoji": "📚"}
-        for title, author, why in picks
-    ]
+    picks = by_genre.get(
+        favorite_genre,
+        [
+            ("Tomorrow, and Tomorrow, and Tomorrow", "Gabrielle Zevin", "A layered novel about creativity, friendship, and ambition."),
+            ("The Covenant of Water", "Abraham Verghese", "A sweeping family story with huge emotional range."),
+        ],
+    )
+    return [{"title": title, "author": author, "genre": favorite_genre, "why": why, "emoji": "📚"} for title, author, why in picks]
