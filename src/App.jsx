@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { APP_VERSION, BUILD_CHANNEL, BUILD_DATE } from "./release";
 
 // ─── Security Utilities ──────────────────────────────────────────────────────
 
@@ -50,6 +51,77 @@ const rateLimiter = (() => {
   };
 })();
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const TOKEN_KEY = "booknook_token";
+const CONSENT_KEY = "booknook_consent";
+
+function readToken() {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  const legacyToken = localStorage.getItem(TOKEN_KEY);
+  if (!token && legacyToken) {
+    sessionStorage.setItem(TOKEN_KEY, legacyToken);
+    localStorage.removeItem(TOKEN_KEY);
+    return legacyToken;
+  }
+  return token;
+}
+
+function setToken(token) {
+  sessionStorage.setItem(TOKEN_KEY, token);
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function clearToken() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function readConsent() {
+  try {
+    return JSON.parse(sessionStorage.getItem(CONSENT_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function setConsent(value) {
+  sessionStorage.setItem(CONSENT_KEY, JSON.stringify({ ...value, savedAt: new Date().toISOString() }));
+}
+
+function clearConsent() {
+  sessionStorage.removeItem(CONSENT_KEY);
+}
+
+function authHeaders() {
+  const token = readToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    let message = "Something went wrong";
+    try {
+      const body = await res.json();
+      message = body.detail || message;
+    } catch {
+      message = res.statusText || message;
+    }
+    throw new Error(message);
+  }
+
+  if (res.status === 204) return null;
+  return res.json();
+}
+
 // 5. LOCATION FUZZING — stores only city-level, never precise GPS
 function fuzzyLocation(city = "") {
   // In production this would reverse-geocode to city only.
@@ -61,8 +133,10 @@ function fuzzyLocation(city = "") {
 const reportedContent = new Set();
 function reportContent(id, reason) {
   reportedContent.add(id);
-  // In production: POST /api/report { contentId: id, reason }
-  console.info("[Book Nook] Content reported:", id, reason);
+  api("/reports", {
+    method: "POST",
+    body: JSON.stringify({ contentId: id, reason, type: "content" }),
+  }).catch(() => console.info("[Book Nook] Content reported locally:", id, reason));
 }
 
 
@@ -213,38 +287,43 @@ function TypeBadge({ type, wantGenre }) {
 const LEGAL_DOCS = {
   privacy: {
     title: "Privacy Policy",
-    updated: "26 May 2025",
+    updated: "25 June 2026",
     sections: [
-      { heading: "What we collect", body: "Your name, email, city (not GPS), reading history, reviews, and exchange messages. We never collect precise location or payment data." },
-      { heading: "How we use it", body: "To run the app, match you with nearby books, personalise AI recommendations, and send notifications you opt into. Never for advertising." },
-      { heading: "Who sees it", body: "Your display name, reviews, listings, and city are public. Your email and password are private. Reading history is only shared (without your name) with our AI recommendation service." },
-      { heading: "Your rights", body: "You can access, correct, export, or delete your data at any time. Email legal@booknook.app. You can also complain to the ICO at ico.org.uk." },
-      { heading: "Security", body: "Passwords are hashed. All data is encrypted in transit. Location is stored at city level only. We rate-limit actions to prevent abuse." },
-      { heading: "Data retention", body: "Your data is kept while your account is active. Exchange messages are deleted after 90 days. Deleting your account removes all personal data within 30 days." },
+      { heading: "Who we are", body: "Book Nook is the controller for this prototype. Contact us about privacy at legal@booknook.app." },
+      { heading: "What we collect", body: "Your name, email, city-level location, reading shelf, reviews, listings, reports, and exchange offers. We do not collect payment data or precise GPS coordinates." },
+      { heading: "Why we use it", body: "We use account data to provide the service, exchange data to connect readers, report data for safety, and security data to prevent abuse. We do not use your data for advertising." },
+      { heading: "Lawful basis", body: "Account, shelf, listing, and exchange processing is needed to provide the service you request. Security and abuse-prevention processing is based on legitimate interests. Optional permission choices are based on consent." },
+      { heading: "Who sees it", body: "Your display name, public reviews, listings, city, and exchange notes can be visible to other readers. Your email, password, security data, reports, and private account records are not shown publicly." },
+      { heading: "Data sharing and transfers", body: "This prototype does not sell personal data and does not send your shelf to third-party AI or analytics providers. Production hosting may involve infrastructure providers, which must be documented before launch." },
+      { heading: "Your rights", body: "You can export or delete your account data from your profile. You can also ask us to correct data, object to processing, withdraw consent where relevant, or raise a privacy concern at legal@booknook.app. You can complain to the ICO." },
+      { heading: "Security", body: "Passwords are hashed, sessions expire and can be revoked, API requests are rate-limited, and location is stored at city level only. Production deployments must use HTTPS." },
+      { heading: "Data retention", body: "Prototype data is kept while your account exists in the active app session. Deleting your account removes your profile, shelf, listings, offers, sessions, and reports from the app store." },
+      { heading: "Children's privacy", body: "Book Nook is not for children under 13. We ask for age confirmation before signup and do not create accounts for under-13 users because verifiable parental consent is not implemented." },
     ]
   },
   terms: {
     title: "Terms & Conditions",
-    updated: "26 May 2025",
+    updated: "25 June 2026",
     sections: [
       { heading: "The Exchange — key rules", body: "No money changes hands. Ever. Books can only be given away free or traded for another book. Listings must be honest about condition. You must own the book you list." },
       { heading: "Your content", body: "You own your reviews and listing descriptions. By posting, you give us permission to display them in the app. Don't post anything false, harmful, or infringing." },
       { heading: "Fair use", body: "Book Nook is for personal, non-commercial use only. No bots, scraping, or multiple accounts. Don't try to work around security measures." },
-      { heading: "AI recommendations", body: "Recommendations are suggestions only. We're not responsible for their accuracy. Your reading history (titles and genres, not your name) is sent to Anthropic's API." },
+      { heading: "Age limit", body: "You must be 13 or older to create an account. If you are under 13, you cannot use this prototype because we do not support verifiable parental consent." },
+      { heading: "Recommendations", body: "Recommendations are suggestions only and may be incomplete or inaccurate. In this prototype, recommendations are generated by the Book Nook API from the books already in your shelf." },
       { heading: "Our liability", body: "We're not responsible for disputes between users, book condition, or postage issues. Use tracked postage for valuable books. Our liability is capped at £100." },
-      { heading: "Termination", body: "We can suspend accounts that break these terms. You can delete your account any time in your profile settings." },
+      { heading: "Termination", body: "We can suspend accounts that break these terms. You can delete your account from your profile." },
     ]
   },
   cookies: {
-    title: "Cookie Policy",
-    updated: "26 May 2025",
+    title: "Storage & Permissions Policy",
+    updated: "25 June 2026",
     sections: [
-      { heading: "Essential cookies", body: "We use a session token to keep you logged in, a preference cookie for your settings, and an auth cookie for 'remember me'. These are required for the app to work." },
-      { heading: "Optional cookies", body: "With your consent, we use anonymised analytics to understand which features are used. No personal identifiers. You can turn this off in Privacy Settings." },
-      { heading: "What we don't use", body: "No advertising cookies, no social media trackers, no third-party ad networks. We do not use Google Analytics or Facebook Pixel." },
-      { heading: "Location permission", body: "We ask for location only when you use the Near Me map. Your device location is processed on-device and not stored. You can deny this and we'll use your city from your profile instead." },
-      { heading: "Notifications", body: "We ask for notification permission to alert you about trade offers, reading streaks, and community activity. You can deny or change this at any time in device Settings." },
-      { heading: "Managing cookies", body: "You can change cookie preferences in Profile → Privacy Settings. Disabling essential cookies will prevent the app from working correctly." },
+      { heading: "Essential browser storage", body: "We use session storage for your login token and consent choices. It is cleared when you sign out or when your browser session ends. We do not use a remember-me cookie." },
+      { heading: "Optional analytics", body: "Optional analytics are not currently implemented. If analytics are added later, they must require a separate consent choice." },
+      { heading: "What we don't use", body: "No advertising cookies, no social media trackers, no third-party ad networks, and no Google Analytics or Facebook Pixel." },
+      { heading: "Location permission", body: "The app asks whether you want nearby listings, but this prototype does not request device GPS. It uses the city in your profile and stores only city-level location." },
+      { heading: "Notifications", body: "The app records your notification preference during onboarding, but browser/device push notifications are not currently enabled." },
+      { heading: "Managing storage", body: "You can sign out to clear your session token, export your account data, or delete your account from your profile." },
     ]
   }
 };
@@ -263,7 +342,7 @@ function LegalDocViewer({ docKey, onClose }) {
       {/* Content */}
       <div style={{flex:1,overflowY:"auto",padding:"20px 24px 40px"}}>
         <div style={{fontSize:12,color:"#888",lineHeight:1.7,marginBottom:20,padding:"12px 14px",background:"rgba(232,196,160,0.06)",borderRadius:10,border:"1px solid rgba(232,196,160,0.12)"}}>
-          This is a plain-English summary. The full legal document is available to download from booknook.app/legal
+          This prototype shows the current plain-English policy summary used by the app.
         </div>
         {doc.sections.map((s,i) => (
           <div key={i} style={{marginBottom:20}}>
@@ -273,8 +352,8 @@ function LegalDocViewer({ docKey, onClose }) {
           </div>
         ))}
         <div style={{marginTop:24,padding:"14px",background:"rgba(255,255,255,0.03)",borderRadius:12,border:"1px solid rgba(255,255,255,0.07)"}}>
-          <div style={{fontSize:11,color:"#555",marginBottom:4}}>Full legal document</div>
-          <div style={{fontSize:13,color:"#E8C4A0"}}>Download at booknook.app/legal/{docKey} →</div>
+          <div style={{fontSize:11,color:"#555",marginBottom:4}}>Questions or corrections</div>
+          <div style={{fontSize:13,color:"#E8C4A0"}}>Contact legal@booknook.app</div>
         </div>
       </div>
     </div>
@@ -286,11 +365,42 @@ function ConsentScreen({ onComplete }) {
   const [agreed, setAgreed] = useState({ terms: false, privacy: false, cookies: false });
   const [viewingDoc, setViewingDoc] = useState(null);
   const [locationChoice, setLocationChoice] = useState(null);   // null | "yes" | "no"
-  const [step, setStep] = useState("legal"); // legal | location | notifications | done
+  const [ageRange, setAgeRange] = useState("");
+  const [step, setStep] = useState("age"); // age | legal | location | notifications | done
 
   const allAgreed = agreed.terms && agreed.privacy && agreed.cookies;
 
   if (viewingDoc) return <LegalDocViewer docKey={viewingDoc} onClose={()=>setViewingDoc(null)}/>;
+
+  if (step === "age") return (
+    <div className="onboarding-shell" style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px"}}>
+      <div style={{textAlign:"center",marginBottom:28}}>
+        <div style={{fontSize:48,marginBottom:16}}>📚</div>
+        <div style={{fontSize:22,fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:8}}>Before we begin</div>
+        <div style={{fontSize:13,color:"#777",lineHeight:1.7}}>Book Nook is not available to children under 13. We use this answer only to check eligibility and do not store it.</div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
+        {[
+          { value:"under13", label:"Under 13" },
+          { value:"13plus", label:"13 or older" },
+        ].map(option => (
+          <button key={option.value} onClick={()=>setAgeRange(option.value)}
+            style={{padding:"13px 14px",borderRadius:14,border:`1px solid ${ageRange===option.value?"rgba(232,196,160,0.5)":"rgba(255,255,255,0.1)"}`,background:ageRange===option.value?"rgba(232,196,160,0.1)":"rgba(255,255,255,0.04)",color:ageRange===option.value?"#E8C4A0":"#B0A898",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",textAlign:"left"}}>
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {ageRange === "under13" && (
+        <div style={{fontSize:12,color:"#E87060",background:"rgba(232,112,96,0.08)",border:"1px solid rgba(232,112,96,0.22)",borderRadius:12,padding:"12px 14px",lineHeight:1.6,marginBottom:14}}>
+          Sorry, Book Nook cannot create accounts for under-13 users in this prototype.
+        </div>
+      )}
+      <button onClick={()=>ageRange==="13plus"?setStep("legal"):null} disabled={ageRange!=="13plus"}
+        style={{width:"100%",padding:"16px",borderRadius:24,background:ageRange==="13plus"?"linear-gradient(135deg,#E8C4A0,#C4A070)":"rgba(255,255,255,0.06)",border:"none",color:ageRange==="13plus"?"#1A1A1A":"#444",fontSize:14,fontWeight:600,cursor:ageRange==="13plus"?"pointer":"not-allowed",fontFamily:"'DM Sans',sans-serif"}}>
+        Continue
+      </button>
+    </div>
+  );
 
   if (step === "location") return (
     <div className="onboarding-shell" style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px"}}>
@@ -342,10 +452,10 @@ function ConsentScreen({ onComplete }) {
           </div>
         ))}
       </div>
-      <div style={{fontSize:11,color:"#555",textAlign:"center",marginBottom:16,lineHeight:1.6}}>You can manage notification preferences any time in Profile → Notifications</div>
+      <div style={{fontSize:11,color:"#555",textAlign:"center",marginBottom:16,lineHeight:1.6}}>This prototype records your preference but does not enable device push notifications yet.</div>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <button onClick={()=>onComplete({location:locationChoice,notifications:"yes"})} style={{padding:"14px",borderRadius:24,background:"linear-gradient(135deg,#E8C4A0,#C4A070)",border:"none",color:"#1A1A1A",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Turn on notifications</button>
-        <button onClick={()=>onComplete({location:locationChoice,notifications:"no"})} style={{padding:"14px",borderRadius:24,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"#888",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Not now</button>
+        <button onClick={()=>onComplete({agreements:agreed,ageConfirmed:true,location:locationChoice,notifications:"yes"})} style={{padding:"14px",borderRadius:24,background:"linear-gradient(135deg,#E8C4A0,#C4A070)",border:"none",color:"#1A1A1A",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Turn on notifications</button>
+        <button onClick={()=>onComplete({agreements:agreed,ageConfirmed:true,location:locationChoice,notifications:"no"})} style={{padding:"14px",borderRadius:24,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"#888",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Not now</button>
       </div>
     </div>
   );
@@ -355,13 +465,13 @@ function ConsentScreen({ onComplete }) {
     <div className="onboarding-shell" style={{minHeight:"100vh",background:"#0D0D0D",fontFamily:"'DM Sans',sans-serif",color:"#F0EBE1",maxWidth:"420px",margin:"0 auto",display:"flex",flexDirection:"column"}}>
       <div style={{flex:1,padding:"52px 28px 24px",overflowY:"auto"}}>
         <div style={{fontSize:26,fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:4}}>Before you start<span style={{color:"#E8C4A0"}}>.</span></div>
-        <div style={{fontSize:13,color:"#777",marginBottom:28,lineHeight:1.6}}>Please read and agree to our policies. Tap each one to read it in full.</div>
+        <div style={{fontSize:13,color:"#777",marginBottom:28,lineHeight:1.6}}>Please read and agree to our current policy summaries before creating an account or signing in.</div>
 
         {/* Document agreements */}
         {[
           { key:"terms",   icon:"📋", label:"Terms & Conditions",  sub:"How the service works and your responsibilities" },
           { key:"privacy", icon:"🔐", label:"Privacy Policy",       sub:"What data we collect and how we protect it" },
-          { key:"cookies", icon:"🍪", label:"Cookie Policy",        sub:"Cookies, location, and notification permissions" },
+          { key:"cookies", icon:"🔧", label:"Storage & Permissions Policy", sub:"Session storage, location, and notification choices" },
         ].map(doc => (
           <div key={doc.key} style={{marginBottom:12}}>
             <div style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${agreed[doc.key]?"rgba(160,232,160,0.3)":"rgba(255,255,255,0.08)"}`,borderRadius:14,padding:"14px 16px",transition:"border-color 0.2s"}}>
@@ -384,11 +494,6 @@ function ConsentScreen({ onComplete }) {
           </div>
         ))}
 
-        {/* Age confirmation */}
-        <div style={{marginTop:4,marginBottom:24,padding:"14px 16px",background:"rgba(255,255,255,0.03)",borderRadius:14,border:"1px solid rgba(255,255,255,0.07)"}}>
-          <div style={{fontSize:12,color:"#666",lineHeight:1.6}}>By continuing you confirm you are <span style={{color:"#F0EBE1",fontWeight:500}}>13 years of age or older</span>, or that a parent or guardian has agreed to these terms on your behalf.</div>
-        </div>
-
         <button onClick={()=>allAgreed?setStep("location"):null} disabled={!allAgreed}
           style={{width:"100%",padding:"16px",borderRadius:24,background:allAgreed?"linear-gradient(135deg,#E8C4A0,#C4A070)":"rgba(255,255,255,0.06)",border:"none",color:allAgreed?"#1A1A1A":"#444",fontSize:14,fontWeight:600,cursor:allAgreed?"pointer":"not-allowed",fontFamily:"'DM Sans',sans-serif",transition:"all 0.3s"}}>
           {allAgreed ? "Continue →" : `Agree to all ${Object.values(agreed).filter(Boolean).length}/3 to continue`}
@@ -401,8 +506,23 @@ function ConsentScreen({ onComplete }) {
 // ─── Onboarding ───────────────────────────────────────────────────────────────
 function Onboarding({ onComplete }) {
   const [step, setStep] = useState(0);
+  const [mode, setMode] = useState("signup");
   const [data, setData] = useState({ name:"", email:"", password:"", location:"", genres:[], goal:12, avatar:"📚" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const avatars = ["📚","🦉","🌙","🌿","☕","🎭","🔭","🏔️"];
+
+  const submit = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await onComplete(data, mode);
+    } catch (err) {
+      setError(err.message || "Could not create your account right now.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const steps = [
     // 0 — Welcome
@@ -410,29 +530,29 @@ function Onboarding({ onComplete }) {
       <div style={{fontSize:56,marginBottom:20}}>📚</div>
       <div style={{fontSize:26,fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:8}}>Welcome to<br/>Book Nook</div>
       <div style={{fontSize:14,color:"#777",lineHeight:1.7,marginBottom:32}}>Your reading life, beautifully tracked.<br/>Trade books. Find your community.</div>
-      <Btn onClick={()=>setStep(1)} variant="solid" style={{width:"100%",padding:16,fontSize:15}}>Get started</Btn>
-      <button onClick={()=>setStep(1)} style={{background:"none",border:"none",color:"#555",fontSize:13,cursor:"pointer",marginTop:14,fontFamily:"'DM Sans',sans-serif"}}>Already have an account? Sign in →</button>
+      <Btn onClick={()=>{setMode("signup");setStep(1);}} variant="solid" style={{width:"100%",padding:16,fontSize:15}}>Get started</Btn>
+      <button onClick={()=>{setMode("login");setStep(1);}} style={{background:"none",border:"none",color:"#555",fontSize:13,cursor:"pointer",marginTop:14,fontFamily:"'DM Sans',sans-serif"}}>Already have an account? Sign in →</button>
     </div>,
 
     // 1 — Name & email (security-hardened)
     (() => {
       const pw = validatePassword(data.password);
       const emailOk = validateEmail(data.email);
-      const canContinue = data.name.trim() && emailOk && pw.valid;
+      const isLogin = mode === "login";
+      const canContinue = isLogin ? emailOk && data.password.length > 0 : data.name.trim() && emailOk && pw.valid;
       return (
         <>
           <div style={{fontSize:11,color:"#666",marginBottom:4}}>Step 1 of 4</div>
-          <div style={{fontSize:18,fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:20}}>Create your account</div>
-          <Label>Your name</Label>
-          <Input value={data.name} onChange={e=>setData(p=>({...p,name:sanitize(e.target.value)}))} placeholder="e.g. Alex"/>
+          <div style={{fontSize:18,fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:20}}>{isLogin ? "Welcome back" : "Create your account"}</div>
+          {!isLogin && <><Label>Your name</Label><Input value={data.name} onChange={e=>setData(p=>({...p,name:sanitize(e.target.value)}))} placeholder="e.g. Alex"/></>}
           <Label>Email</Label>
           <div style={{position:"relative"}}>
             <Input type="email" value={data.email} onChange={e=>setData(p=>({...p,email:e.target.value.trim()}))} placeholder="you@example.com"/>
             {data.email.length > 4 && <div style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",fontSize:14}}>{emailOk ? "✅" : "❌"}</div>}
           </div>
           <Label>Password</Label>
-          <Input type="password" value={data.password} onChange={e=>setData(p=>({...p,password:e.target.value}))} placeholder="Min. 8 characters, mixed case + number"/>
-          {data.password.length > 0 && (
+          <Input type="password" value={data.password} onChange={e=>setData(p=>({...p,password:e.target.value}))} placeholder={isLogin ? "Your password" : "Min. 8 characters, mixed case + number"}/>
+          {!isLogin && data.password.length > 0 && (
             <div style={{marginTop:8}}>
               <div style={{display:"flex",gap:4,marginBottom:6}}>
                 {[1,2,3,4,5].map(i=><div key={i} style={{flex:1,height:3,borderRadius:2,background:i<=pw.score?pw.color:"rgba(255,255,255,0.08)",transition:"background 0.3s"}}/>)}
@@ -445,10 +565,12 @@ function Onboarding({ onComplete }) {
               </div>
             </div>
           )}
-          <div style={{fontSize:11,color:"#555",marginTop:12,lineHeight:1.6,padding:"10px 12px",background:"rgba(255,255,255,0.03)",borderRadius:10,border:"1px solid rgba(255,255,255,0.07)"}}>
+          {!isLogin && <div style={{fontSize:11,color:"#555",marginTop:12,lineHeight:1.6,padding:"10px 12px",background:"rgba(255,255,255,0.03)",borderRadius:10,border:"1px solid rgba(255,255,255,0.07)"}}>
             🔒 Your password is hashed before storage — we never see it in plain text.
-          </div>
-          <Btn onClick={()=>canContinue?setStep(2):null} variant="solid" disabled={!canContinue} style={{width:"100%",padding:14,marginTop:16}}>Continue →</Btn>
+          </div>}
+          {isLogin && error && <div style={{fontSize:12,color:"#E87060",background:"rgba(232,112,96,0.08)",border:"1px solid rgba(232,112,96,0.22)",borderRadius:12,padding:"10px 12px",marginTop:12,lineHeight:1.5}}>{error}</div>}
+          <Btn onClick={()=>canContinue?(isLogin?submit():setStep(2)):null} variant="solid" disabled={!canContinue || saving} style={{width:"100%",padding:14,marginTop:16}}>{isLogin ? (saving ? "Signing in..." : "Sign in") : "Continue →"}</Btn>
+          {isLogin && <button onClick={()=>setMode("signup")} style={{background:"none",border:"none",color:"#555",fontSize:13,cursor:"pointer",marginTop:12,fontFamily:"'DM Sans',sans-serif",width:"100%"}}>Need an account? Create one</button>}
         </>
       );
     })(),
@@ -496,7 +618,8 @@ function Onboarding({ onComplete }) {
           ))}
         </div>
       </div>
-      <Btn onClick={()=>onComplete(data)} variant="solid" style={{width:"100%",padding:16,fontSize:15}}>Start reading 🎉</Btn>
+      {error && <div style={{fontSize:12,color:"#E87060",background:"rgba(232,112,96,0.08)",border:"1px solid rgba(232,112,96,0.22)",borderRadius:12,padding:"10px 12px",marginBottom:12,lineHeight:1.5}}>{error}</div>}
+      <Btn onClick={submit} variant="solid" disabled={saving} style={{width:"100%",padding:16,fontSize:15}}>{saving ? "Creating account..." : "Start reading 🎉"}</Btn>
     </>,
   ];
 
@@ -877,11 +1000,8 @@ function AIRecsSheet({ books, onClose }) {
   const [error, setError] = useState(null);
   const load = useCallback(async () => {
     setLoading(true); setError(null); setRecs(null);
-    const topBooks = books.slice(0,5).map(b=>`"${b.title}" by ${b.author} (${b.genre}, rated ${b.rating}/5)`).join(", ");
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Based on these books I've loved: ${topBooks}\n\nRecommend 4 books I'd enjoy next. Reply ONLY with a JSON array (no markdown):\n[{"title":"...","author":"...","genre":"...","why":"One warm sentence on why I'd love this","emoji":"📚"}]`}]})});
-      const data = await res.json();
-      setRecs(JSON.parse(data.content.map(c=>c.text||"").join("").replace(/```json|```/g,"").trim()));
+      setRecs(await api("/recommendations", { method:"POST", body:JSON.stringify({ books: books.slice(0, 20) }) }));
     } catch { setError("Couldn't load recommendations. Try again!"); }
     setLoading(false);
   }, [books]);
@@ -1015,9 +1135,11 @@ function NearbyMapView({ listings, onOffer, myOffers }) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function BookNook() {
-  const [authed, setAuthed] = useState(false);
-  const [consented, setConsented] = useState(false);
+  const [authed, setAuthed] = useState(()=>Boolean(readToken()));
+  const [consented, setConsented] = useState(()=>Boolean(readConsent()));
   const [user, setUser] = useState(null);
+  const [booting, setBooting] = useState(()=>Boolean(readToken()));
+  const [consentRecord, setConsentRecord] = useState(()=>readConsent());
   const [tab, setTab] = useState("discover");
   const [modal, setModal] = useState(null);
   const [books, setBooks] = useState(MY_BOOKS);
@@ -1034,12 +1156,140 @@ export default function BookNook() {
   const [marketView, setMarketView] = useState("list"); // list | nearby
   const [selectedBook, setSelectedBook] = useState(null);
   const [animated, setAnimated] = useState(false);
+  const [profileNotice, setProfileNotice] = useState("");
+  const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(()=>{ const t=setTimeout(()=>setAnimated(true),80); return()=>clearTimeout(t); },[]);
   useEffect(()=>{ window.scrollTo({top:0,left:0,behavior:"auto"}); },[tab]);
+  useEffect(() => {
+    const onUpdateReady = () => setUpdateReady(true);
+    window.addEventListener("booknook:update-ready", onUpdateReady);
+    return () => window.removeEventListener("booknook:update-ready", onUpdateReady);
+  }, []);
 
-  if (!authed) return <Onboarding onComplete={data=>{ setUser({...data, location: fuzzyLocation(data.location)}); setAuthed(true); }}/>;
-  if (!consented) return <ConsentScreen onComplete={()=>setConsented(true)}/>;
+  useEffect(() => {
+    if (!authed || user) return;
+    let cancelled = false;
+    api("/bootstrap")
+      .then(data => {
+        if (cancelled) return;
+        setUser(data.user);
+        setBooks(data.books?.length ? data.books : MY_BOOKS);
+        setListings(data.listings?.length ? data.listings : INITIAL_LISTINGS);
+      })
+      .catch(() => {
+        clearToken();
+        if (!cancelled) {
+          setAuthed(false);
+          setUser(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBooting(false);
+      });
+    return () => { cancelled = true; };
+  }, [authed, user]);
+
+  const completeOnboarding = async (data, mode = "signup") => {
+    const payload = { ...data, ageConfirmed: Boolean(consentRecord?.ageConfirmed), location: fuzzyLocation(data.location) };
+    try {
+      const registered = await api(mode === "login" ? "/auth/login" : "/auth/register", {
+        method: "POST",
+        body: JSON.stringify(mode === "login" ? { email: payload.email, password: payload.password } : payload),
+      });
+      setToken(registered.token);
+      setUser(registered.user);
+      const data = await api("/bootstrap").catch(() => null);
+      setBooks(data?.books?.length ? data.books : MY_BOOKS);
+      setListings(data?.listings?.length ? data.listings : INITIAL_LISTINGS);
+    } catch (err) {
+      if (!String(err.message || "").toLowerCase().includes("failed to fetch")) throw err;
+      if (mode === "login") throw err;
+      setToken("demo");
+      setUser(payload);
+    }
+    setBooting(false);
+    setAuthed(true);
+  };
+
+  const addBook = async (book) => {
+    const pages = Number(book.pages) || 0;
+    const temp = { ...book, id: Date.now(), pages, read: book.status === "read" ? pages : 0, rating: book.rating || 3 };
+    setBooks(p => [...p, temp]);
+    try {
+      const saved = await api("/books", { method: "POST", body: JSON.stringify(temp) });
+      setBooks(p => p.map(b => b.id === temp.id ? saved : b));
+    } catch {
+      // Keep the optimistic local book in demo/offline mode.
+    }
+  };
+
+  const createListing = async (listing) => {
+    setListings(p => [listing, ...p]);
+    try {
+      const saved = await api("/listings", { method: "POST", body: JSON.stringify(listing) });
+      setListings(p => p.map(l => l.id === listing.id ? saved : l));
+    } catch {
+      // Keep the optimistic local listing in demo/offline mode.
+    }
+  };
+
+  const createOffer = async (id, offer) => {
+    setListings(p => p.map(l => l.id === id ? { ...l, offers: [...l.offers, offer] } : l));
+    setMyOffers(p => new Set([...p, id]));
+    try {
+      const saved = await api(`/listings/${id}/offers`, { method: "POST", body: JSON.stringify(offer) });
+      setListings(p => p.map(l => l.id === id ? { ...l, offers: l.offers.map(o => o === offer ? saved : o) } : l));
+    } catch {
+      // Keep the optimistic local offer in demo/offline mode.
+    }
+  };
+
+  const signOut = async () => {
+    await api("/auth/logout", { method: "POST" }).catch(() => null);
+    clearToken();
+    clearConsent();
+    setConsentRecord(null);
+    setAuthed(false);
+    setUser(null);
+    setShowProfile(false);
+  };
+
+  const exportAccountData = async () => {
+    setProfileNotice("");
+    try {
+      const data = await api("/me/export");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "booknook-data-export.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      setProfileNotice("Data export downloaded.");
+    } catch {
+      setProfileNotice("Could not export data right now.");
+    }
+  };
+
+  const deleteAccount = async () => {
+    setProfileNotice("");
+    try {
+      await api("/me", { method: "DELETE" });
+      clearToken();
+      clearConsent();
+      setConsentRecord(null);
+      setAuthed(false);
+      setUser(null);
+      setShowProfile(false);
+    } catch {
+      setProfileNotice("Could not delete account right now.");
+    }
+  };
+
+  if (!consented) return <ConsentScreen onComplete={(choices)=>{setConsent(choices);setConsentRecord(choices);setConsented(true);}}/>;
+  if (booting) return <div className="book-nook-app loading-view">Opening your shelf...</div>;
+  if (!authed) return <Onboarding onComplete={completeOnboarding}/>;
 
   const totalPages = books.reduce((a,b)=>a+b.read,0);
   const pct = Math.round((CURRENT_BOOK.read/CURRENT_BOOK.pages)*100);
@@ -1275,11 +1525,11 @@ export default function BookNook() {
       </div>
 
       {/* Modals */}
-      {modal==="add"    && <AddBookSheet    onClose={()=>setModal(null)} onAdd={b=>setBooks(p=>[...p,{...b,rating:b.rating||3}])}/>}
+      {modal==="add"    && <AddBookSheet    onClose={()=>setModal(null)} onAdd={addBook}/>}
       {modal==="ai"     && <AIRecsSheet     books={books} onClose={()=>setModal(null)}/>}
       {modal==="review" && <YearReview      books={books} onClose={()=>setModal(null)}/>}
-      {modal==="list"   && <ListMyBookSheet myBooks={books} userLocation={user?.location} onClose={()=>setModal(null)} onList={l=>setListings(p=>[l,...p])}/>}
-      {offerTarget      && <OfferSheet      listing={offerTarget} onClose={()=>setOfferTarget(null)} onSubmit={(id,offer)=>{ setListings(p=>p.map(l=>l.id===id?{...l,offers:[...l.offers,offer]}:l)); setMyOffers(p=>new Set([...p,id])); setOfferTarget(null); }}/>}
+      {modal==="list"   && <ListMyBookSheet myBooks={books} userLocation={user?.location} onClose={()=>setModal(null)} onList={createListing}/>}
+      {offerTarget      && <OfferSheet      listing={offerTarget} onClose={()=>setOfferTarget(null)} onSubmit={createOffer}/>}
       {showProfile && (
         <Sheet onClose={()=>setShowProfile(false)} title="Your Profile">
           <div style={{textAlign:"center",paddingBottom:8}}>
@@ -1308,6 +1558,7 @@ export default function BookNook() {
                 ["Location","City-level only, no GPS stored"],
                 ["Messages","Only visible to the two parties in a trade"],
                 ["Data","You can request deletion at any time"],
+                ["Build",`${BUILD_CHANNEL} ${APP_VERSION} · ${BUILD_DATE}`],
               ].map(([k,v])=>(
                 <div key={k} style={{display:"flex",gap:10,marginBottom:7}}>
                   <div style={{fontSize:11,color:"#aaa",width:70,flexShrink:0,fontWeight:500}}>{k}</div>
@@ -1315,13 +1566,26 @@ export default function BookNook() {
                 </div>
               ))}
             </div>
+            {profileNotice && <div style={{fontSize:12,color:profileNotice.includes("Could not")?"#E87060":"#A0E8A0",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"10px 12px",lineHeight:1.5}}>{profileNotice}</div>}
             <Btn onClick={()=>setShowProfile(false)} variant="ghost" style={{width:"100%"}}>Edit profile</Btn>
-            <Btn onClick={()=>setConsented(false)} variant="ghost" style={{width:"100%",marginTop:0}}>⚙️ Review permissions & policies</Btn>
-            <Btn onClick={()=>{setAuthed(false);setUser(null);setShowProfile(false);}} variant="danger" style={{width:"100%",background:"rgba(232,100,80,0.1)",border:"1px solid rgba(232,100,80,0.3)",color:"#E87060"}}>Sign out</Btn>
+            <Btn onClick={()=>{clearConsent();setConsentRecord(null);setConsented(false);setShowProfile(false);}} variant="ghost" style={{width:"100%",marginTop:0}}>⚙️ Review permissions & policies</Btn>
+            <Btn onClick={exportAccountData} variant="ghost" style={{width:"100%",marginTop:0}}>Export my data</Btn>
+            <Btn onClick={deleteAccount} variant="ghost" style={{width:"100%",marginTop:0,background:"rgba(232,100,80,0.08)",border:"1px solid rgba(232,100,80,0.22)",color:"#E87060"}}>Delete account</Btn>
+            <Btn onClick={signOut} variant="danger" style={{width:"100%",background:"rgba(232,100,80,0.1)",border:"1px solid rgba(232,100,80,0.3)",color:"#E87060"}}>Sign out</Btn>
           </div>
         </Sheet>
       )}
       {selectedBook     && <BookDetailSheet book={selectedBook} onClose={()=>setSelectedBook(null)}/>}
+
+      {updateReady && (
+        <div style={{position:"fixed",left:"50%",bottom:18,transform:"translateX(-50%)",width:"calc(100% - 32px)",maxWidth:420,zIndex:260,background:"#171717",border:"1px solid rgba(232,196,160,0.28)",borderRadius:14,padding:"12px 14px",boxShadow:"0 14px 40px rgba(0,0,0,0.45)",display:"flex",alignItems:"center",gap:12}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#F0EBE1"}}>Update ready</div>
+            <div style={{fontSize:11,color:"#888",marginTop:2}}>Reload to test the latest Book Nook build.</div>
+          </div>
+          <button onClick={()=>window.dispatchEvent(new Event("booknook:apply-update"))} style={{background:"linear-gradient(135deg,#E8C4A0,#C4A070)",border:"none",borderRadius:20,padding:"8px 12px",fontSize:12,fontWeight:700,color:"#1A1A1A",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Reload</button>
+        </div>
+      )}
 
       <div className="bottom-accent" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"420px",height:1,background:"linear-gradient(90deg,transparent,rgba(232,196,160,0.12),transparent)"}}/>
     </div>

@@ -15,7 +15,10 @@
 html {
   min-width: 320px;
   min-height: 100%;
-  background: #080808;
+  background:
+    linear-gradient(135deg, rgba(13, 58, 55, 0.22), transparent 32%),
+    linear-gradient(220deg, rgba(60, 44, 86, 0.18), transparent 36%),
+    #080808;
   scrollbar-gutter: stable;
 }
 
@@ -24,7 +27,9 @@ body {
   min-height: 100vh;
   margin: 0;
   overflow-y: scroll;
-  background: #080808;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 180px),
+    transparent;
 }
 
 button,
@@ -32,6 +37,18 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled) {
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, opacity 160ms ease;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
 }
 
 button:focus-visible,
@@ -49,17 +66,77 @@ select:focus-visible {
 .book-nook-app {
   width: 100%;
   min-height: 100svh !important;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
+  background:
+    linear-gradient(180deg, rgba(160, 196, 232, 0.045), transparent 260px),
+    linear-gradient(140deg, rgba(232, 196, 160, 0.04), transparent 38%),
+    #0d0d0d !important;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.42);
 }
 
 .onboarding-shell {
   min-height: 100svh !important;
+  background:
+    linear-gradient(180deg, rgba(232, 196, 160, 0.055), transparent 280px),
+    #0d0d0d !important;
 }
 
 .app-header,
 .app-tabs,
 .app-content {
   width: 100%;
+}
+
+.loading-view {
+  display: grid;
+  min-height: 100svh !important;
+  place-items: center;
+  color: #e8c4a0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(24px, 5vw, 42px);
+}
+
+.loading-view::after {
+  content: "";
+  width: 42px;
+  height: 3px;
+  margin-top: 18px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e8c4a0, #a0c4e8, #a0e8d4);
+  animation: loading-slide 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes loading-slide {
+  from {
+    opacity: 0.45;
+    transform: scaleX(0.55);
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleX(1.35);
+  }
+}
+
+.app-content > div {
+  animation: content-in 260ms ease both;
+}
+
+@keyframes content-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (hover: hover) {
+  button:not(:disabled):hover {
+    filter: brightness(1.08);
+  }
 }
 
 @media (min-width: 640px) {
@@ -105,6 +182,10 @@ select:focus-visible {
   .book-nook-app {
     max-width: 1180px !important;
     border-inline: 1px solid rgba(255, 255, 255, 0.06);
+    min-height: calc(100vh - 40px) !important;
+    margin-block: 20px !important;
+    border-radius: 28px;
+    overflow: hidden;
   }
 
   .app-header,

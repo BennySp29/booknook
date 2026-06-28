@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Book Nook</title>
+  <rect width="512" height="512" rx="112" fill="#0D0D0D"/>
+  <path d="M132 132c0-22 18-40 40-40h196c18 0 32 14 32 32v242c0 18-14 32-32 32H172c-22 0-40-18-40-40V132Z" fill="#E8C4A0"/>
+  <path d="M172 92h188c22 0 40 18 40 40v228c0-18-14-32-32-32H172c-22 0-40 18-40 40V132c0-22 18-40 40-40Z" fill="#2D4A3E"/>
+  <path d="M180 150h148M180 198h172M180 246h132" stroke="#F0EBE1" stroke-width="24" stroke-linecap="round"/>
+  <path d="M132 360c0-18 14-32 32-32h204c18 0 32 14 32 32s-14 32-32 32H164c-18 0-32-14-32-32Z" fill="#F0EBE1"/>
+</svg>
