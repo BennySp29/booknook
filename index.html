@@ -156,21 +156,42 @@
   <div id="root">
     <div style="padding: 40px; text-align: center; color: #888;">
       <div style="font-size: 32px; margin-bottom: 12px;">📚</div>
-      <div style="font-family: 'Playfair Display', serif; font-size: 18px; color: #e8c4a0;">Loading Book Nook…</div>
+      <div style="font-family: 'Playfair Display', serif; font-size: 18px; color: #e8c4a0;">Loading Book Nook v0.1…</div>
     </div>
   </div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-    // ─── Register Service Worker for PWA ──────────────────────────────────────────
+    // ─── PWA Service Worker Registration & Live Version 0.1 Update Listener ───────
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(
-          reg => console.log('[Book Nook] PWA ServiceWorker active:', reg.scope),
-          err => console.warn('[Book Nook] ServiceWorker registration notice:', err)
-        );
+        navigator.serviceWorker.register('/sw.js').then(reg => {
+          console.log('[Book Nook PWA] ServiceWorker active on scope:', reg.scope);
+          // Check for service worker updates immediately
+          reg.update().catch(() => {});
+
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[Book Nook PWA] Update to version 0.1 ready');
+                window.dispatchEvent(new CustomEvent('pwa-update-ready'));
+              }
+            });
+          });
+        }).catch(err => console.warn('[Book Nook PWA] SW notice:', err));
+
+        // Auto reload when controller changes to claim fresh v0.1 cache
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
+        });
       });
     }
 
@@ -803,7 +824,6 @@
       return (
         <Sheet onClose={onClose} title="Cookie & Storage Settings 🍪" subtitle="Customise what Book Nook stores on your device under PECR / GDPR regulations">
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 24 }}>
-            {/* Essential */}
             <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "14px 16px", border: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#F0EBE1" }}>1. Strictly Essential Storage</div>
@@ -814,7 +834,6 @@
               </div>
             </div>
 
-            {/* Reading Preferences */}
             <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "14px 16px", border: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#F0EBE1" }}>2. Reader Experience & UI</div>
@@ -830,7 +849,6 @@
               </div>
             </div>
 
-            {/* Social & Exchange */}
             <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "14px 16px", border: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#F0EBE1" }}>3. Social Feed & Trade Caching</div>
@@ -864,7 +882,6 @@
       const [newMsg, setNewMsg] = useState("");
       const [status, setStatus] = useState(trade.status || "accepted");
       const [safeSpot, setSafeSpot] = useState(trade.safe_spot || "Local Public Library");
-      const [customSpot, setCustomSpot] = useState("");
       const [loading, setLoading] = useState(true);
       const [completing, setCompleting] = useState(false);
       const messagesEndRef = useRef(null);
@@ -872,7 +889,6 @@
       const isOwner = trade.owner_id === currentUserId;
       const partnerName = isOwner ? trade.recipient_name : trade.owner_name;
       const partnerAvatar = isOwner ? trade.recipient_avatar : trade.owner_avatar;
-      const partnerKarma = isOwner ? trade.recipient_karma : trade.owner_karma;
 
       const safeSpotsPreset = [
         "🏛️ Central Public Library",
@@ -904,7 +920,7 @@
 
       useEffect(() => {
         fetchTradeDetails();
-        const interval = setInterval(fetchTradeDetails, 4000); // Polling for real-time messages
+        const interval = setInterval(fetchTradeDetails, 4000);
         return () => clearInterval(interval);
       }, [trade.id]);
 
@@ -963,7 +979,7 @@
                   { key: "accepted", label: "Accepted", icon: "🤝" },
                   { key: "scheduled", label: "Scheduled", icon: "📍" },
                   { key: "completed", label: "Completed", icon: "🎁" }
-                ].map((s, idx) => {
+                ].map((s) => {
                   const isDone = status === s.key || (status === "scheduled" && s.key === "accepted") || (status === "completed");
                   const isCurrent = status === s.key;
                   return (
@@ -1014,7 +1030,7 @@
             </div>
 
             {/* Live Message Chat Stream */}
-            <div style={{ height: "240px", overflowY: "auto", background: "#0c0e14", borderRadius: 18, padding: "14px", border: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ height: "220px", overflowY: "auto", background: "#0c0e14", borderRadius: 18, padding: "14px", border: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", gap: 10 }}>
               {loading ? (
                 <div style={{ textAlign: "center", color: "#888", paddingTop: 40, fontSize: 12 }}>Connecting to secure trade room…</div>
               ) : messages.length === 0 ? (
@@ -1342,7 +1358,6 @@
                 </div>
               </div>
 
-              {/* Age Bracket */}
               <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                 {[
                   { v: "18+", l: "Adult Reader (18+)" },
@@ -1381,7 +1396,7 @@
               </button>
             </div>
 
-            {/* 2. Three Separate Policy Checkboxes */}
+            {/* 2. Policy Checkboxes */}
             {[
               { key: "terms",   icon: "📋", label: "Terms & Guidelines", sub: "Cashless book exchange rules & community safety", manage: null },
               { key: "privacy", icon: "🔐", label: "Privacy Policy",     sub: "UK GDPR & Data Protection Act 2018 rights", manage: null },
@@ -1544,7 +1559,6 @@
               </button>
             )}
 
-            {/* Step 0: Welcome */}
             {step === 0 && (
               <div style={{ textAlign: "center", padding: "20px 0" }}>
                 <div style={{ width: 84, height: 84, borderRadius: 24, background: "linear-gradient(135deg, rgba(232,196,160,0.15), rgba(196,160,112,0.05))", border: "1px solid rgba(232,196,160,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 42, margin: "0 auto 24px", boxShadow: "0 8px 32px rgba(232,196,160,0.15)" }}>
@@ -1574,7 +1588,6 @@
               </div>
             )}
 
-            {/* Step 1: Account Creation & Country Legislation */}
             {step === 1 && (
               <div className="animate-slide-up">
                 <div style={{ fontSize: 11, color: "var(--accent-gold)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 6 }}>Step 1 of 4</div>
@@ -1621,13 +1634,6 @@
                       <div style={{ fontSize: 11, color: pw.color, fontWeight: 600, textTransform: "capitalize" }}>{pw.strength} strength</div>
                       <div style={{ fontSize: 11, color: pw.valid ? "#A0E8A0" : "#888" }}>{pw.valid ? "Ready ✓" : "Minimum 3 criteria needed"}</div>
                     </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {[["8+ chars", pw.checks.length], ["Uppercase", pw.checks.upper], ["Lowercase", pw.checks.lower], ["Number", pw.checks.number], ["Symbol", pw.checks.special]].map(([l, ok]) => (
-                        <span key={l} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 10, background: ok ? "rgba(160,232,184,0.15)" : "rgba(255,255,255,0.04)", color: ok ? "#A0E8B8" : "#666", border: `1px solid ${ok ? "rgba(160,232,184,0.3)" : "rgba(255,255,255,0.08)"}` }}>
-                          {ok ? "✓ " : ""}{l}
-                        </span>
-                      ))}
-                    </div>
                   </div>
                 )}
 
@@ -1637,7 +1643,6 @@
               </div>
             )}
 
-            {/* Step 2: Location & Avatar */}
             {step === 2 && (
               <div className="animate-slide-up">
                 <div style={{ fontSize: 11, color: "var(--accent-gold)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 6 }}>Step 2 of 4</div>
@@ -1646,7 +1651,6 @@
 
                 <Label>Your City or Town</Label>
                 <Input value={data.location} onChange={e => setData(p => ({ ...p, location: sanitize(e.target.value) }))} placeholder="e.g. Manchester, UK" />
-                <div style={{ fontSize: 11, color: "#666", marginTop: 6 }}>📍 Stored as city only — we never track or save exact addresses.</div>
 
                 <Label>Choose your reader icon</Label>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 28 }}>
@@ -1679,7 +1683,6 @@
               </div>
             )}
 
-            {/* Step 3: Genre Preferences */}
             {step === 3 && (
               <div className="animate-slide-up">
                 <div style={{ fontSize: 11, color: "var(--accent-gold)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 6 }}>Step 3 of 4</div>
@@ -1716,7 +1719,6 @@
               </div>
             )}
 
-            {/* Step 4: Reading Goal */}
             {step === 4 && (
               <div className="animate-slide-up">
                 <div style={{ fontSize: 11, color: "var(--accent-gold)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 6 }}>Step 4 of 4</div>
@@ -1728,27 +1730,6 @@
                     {data.goal}
                   </div>
                   <div style={{ fontSize: 14, color: "#8E8A82", marginTop: 8 }}>books in 2026</div>
-
-                  <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 24 }}>
-                    {[6, 12, 24, 52].map(n => (
-                      <button
-                        key={n}
-                        onClick={() => setData(p => ({ ...p, goal: n }))}
-                        style={{
-                          padding: "8px 16px",
-                          borderRadius: 20,
-                          fontSize: 13,
-                          border: `1px solid ${data.goal === n ? "var(--accent-gold)" : "rgba(255,255,255,0.1)"}`,
-                          background: data.goal === n ? "rgba(232,196,160,0.15)" : "rgba(255,255,255,0.04)",
-                          color: data.goal === n ? "var(--accent-gold)" : "#8E8A82",
-                          cursor: "pointer",
-                          fontWeight: 500
-                        }}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 <Btn onClick={handleRegisterComplete} variant="solid" style={{ width: "100%", padding: 16, fontSize: 15 }}>
@@ -1840,7 +1821,7 @@
             });
           }
         } catch (err) {
-          console.warn("[Camera Scanner] Camera initialization notice:", err.message);
+          console.warn("[Camera Scanner] Camera notice:", err.message);
           setCameraError("Camera unavailable or permission denied. You can still test with the instant demo scan button below!");
         }
       };
@@ -2052,46 +2033,7 @@
               <Label>Page Count</Label>
               <Input type="number" value={manual.pages} onChange={e => setManual(p => ({ ...p, pages: parseInt(e.target.value) || 0 }))} placeholder="320" />
 
-              <Label>Genre</Label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                {GENRES.map(g => (
-                  <button
-                    key={g}
-                    onClick={() => setManual(p => ({ ...p, genre: g }))}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 18,
-                      border: `1px solid ${manual.genre === g ? "var(--accent-gold)" : "rgba(255,255,255,0.08)"}`,
-                      background: manual.genre === g ? "rgba(232,196,160,0.15)" : "transparent",
-                      color: manual.genre === g ? "var(--accent-gold)" : "#8E8A82",
-                      fontSize: 12,
-                      cursor: "pointer"
-                    }}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-
-              <Label>Cover Spine Color</Label>
-              <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                {["#2D4A3E", "#8B4513", "#C4922A", "#1A3A4A", "#3A2A4A", "#4A1A24"].map(c => (
-                  <button
-                    key={c}
-                    onClick={() => setManual(p => ({ ...p, cover: c }))}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: c,
-                      border: manual.cover === c ? "2px solid #fff" : "1px solid rgba(255,255,255,0.2)",
-                      cursor: "pointer"
-                    }}
-                  />
-                ))}
-              </div>
-
-              <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
                 <Btn onClick={() => setStep("method")} variant="ghost" style={{ flex: 1 }}>Back</Btn>
                 <Btn
                   onClick={() => {
@@ -2117,38 +2059,7 @@
                 <div>
                   <div style={{ fontSize: 16, fontFamily: "var(--font-serif)", fontWeight: 700 }}>{found.title}</div>
                   <div style={{ fontSize: 13, color: "#8E8A82", marginTop: 2 }}>{found.author}</div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                    <Pill label={found.genre} />
-                    <Pill label={`${found.pages} pages`} />
-                  </div>
                 </div>
-              </div>
-
-              <Label>Reading Status</Label>
-              <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                {[
-                  { v: "read", l: "✅ Finished" },
-                  { v: "reading", l: "📖 Currently Reading" },
-                  { v: "want", l: "🔖 Want to Read" }
-                ].map(s => (
-                  <button
-                    key={s.v}
-                    onClick={() => setStatus(s.v)}
-                    style={{
-                      flex: 1,
-                      padding: "10px 4px",
-                      borderRadius: 12,
-                      border: `1px solid ${status === s.v ? "var(--accent-gold)" : "rgba(255,255,255,0.1)"}`,
-                      background: status === s.v ? "rgba(232,196,160,0.15)" : "transparent",
-                      color: status === s.v ? "var(--accent-gold)" : "#8E8A82",
-                      fontSize: 11,
-                      cursor: "pointer",
-                      fontWeight: status === s.v ? 600 : 400
-                    }}
-                  >
-                    {s.l}
-                  </button>
-                ))}
               </div>
 
               <Btn
@@ -2178,904 +2089,6 @@
       );
     }
 
-    // ─── AI Recommendations Sheet ─────────────────────────────────────────────────
-
-    function AIRecsSheet({ books, userGenres, onClose, onAddBook }) {
-      const [loading, setLoading] = useState(true);
-      const [selectedGenre, setSelectedGenre] = useState("All");
-      const [recs, setRecs] = useState([]);
-
-      useEffect(() => {
-        apiClient.getRecommendations()
-          .then(data => {
-            setRecs(data.recommendations || []);
-            setLoading(false);
-          })
-          .catch(() => {
-            setRecs([
-              { title: "Piranesi", author: "Susanna Clarke", genre: "Fantasy", emoji: "🏛️", why: "An intoxicating labyrinth of mystery and wonder.", pages: 272, cover: "#1A3A3A" },
-              { title: "Children of Time", author: "Adrian Tchaikovsky", genre: "Sci-Fi", emoji: "🕷️", why: "Grand evolutionary sci-fi exploring planetary survival.", pages: 600, cover: "#2A1A4A" },
-              { title: "A Gentleman in Moscow", author: "Amor Towles", genre: "Fiction", emoji: "🍷", why: "Pure elegance and charm inside the Metropol hotel.", pages: 462, cover: "#4A2A1A" },
-              { title: "Four Thousand Weeks", author: "Oliver Burkeman", genre: "Non-Fiction", emoji: "⏳", why: "A refreshing philosophical antidote to modern burnout.", pages: 288, cover: "#3A3A1A" }
-            ]);
-            setLoading(false);
-          });
-      }, []);
-
-      const filteredRecs = selectedGenre === "All" ? recs : recs.filter(r => r.genre === selectedGenre);
-
-      return (
-        <Sheet onClose={onClose} title="Your Next Great Read ✨" subtitle="Curated AI recommendations based on your reading taste">
-          {loading ? (
-            <div style={{ textAlign: "center", padding: "48px 0" }}>
-              <div style={{ fontSize: 40, marginBottom: 14, display: "inline-block", animation: "spin 2s linear infinite" }}>✨</div>
-              <div style={{ fontSize: 14, color: "var(--accent-gold)", fontWeight: 500 }}>Analyzing your 5-star ratings & reading patterns…</div>
-            </div>
-          ) : (
-            <div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 14 }}>
-                {["All", "Fiction", "Sci-Fi", "Fantasy", "Non-Fiction"].map(g => (
-                  <button
-                    key={g}
-                    onClick={() => setSelectedGenre(g)}
-                    style={{
-                      padding: "6px 14px",
-                      borderRadius: 18,
-                      fontSize: 11,
-                      border: `1px solid ${selectedGenre === g ? "var(--accent-gold)" : "rgba(255,255,255,0.08)"}`,
-                      background: selectedGenre === g ? "rgba(232,196,160,0.15)" : "rgba(255,255,255,0.04)",
-                      color: selectedGenre === g ? "var(--accent-gold)" : "#888",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap"
-                    }}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {filteredRecs.map((r, i) => (
-                  <Card key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start", animation: `slideUp 0.3s ${i * 0.08}s both` }}>
-                    <span style={{ fontSize: 32, flexShrink: 0 }}>{r.emoji}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 16, fontFamily: "var(--font-serif)", fontWeight: 700 }}>{r.title}</div>
-                      <div style={{ fontSize: 12, color: "#8E8A82", marginTop: 2 }}>{r.author}</div>
-                      <div style={{ marginTop: 6 }}>
-                        <Pill label={r.genre} color={GENRE_COLORS[r.genre]} />
-                      </div>
-                      <div style={{ fontSize: 12, color: "#B0A89C", marginTop: 8, fontStyle: "italic", lineHeight: 1.6 }}>
-                        "{r.why}"
-                      </div>
-                      <div style={{ marginTop: 12 }}>
-                        <Btn
-                          onClick={() => {
-                            if (onAddBook) {
-                              onAddBook({
-                                title: r.title,
-                                author: r.author,
-                                genre: r.genre,
-                                pages: r.pages,
-                                read: 0,
-                                rating: 5,
-                                cover: r.cover,
-                                month: new Date().getMonth() + 1,
-                                status: "want",
-                                review: "Discovered via AI recommendations on Book Nook."
-                              });
-                            }
-                            onClose();
-                          }}
-                          variant="outline"
-                          style={{ padding: "6px 14px", fontSize: 11 }}
-                        >
-                          + Want to Read
-                        </Btn>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-        </Sheet>
-      );
-    }
-
-    // ─── Year in Review / Share Card Modal ────────────────────────────────────────
-
-    function YearReview({ books, user, onClose }) {
-      const total = books.length;
-      const pages = books.reduce((a, b) => a + (b.read || 0), 0);
-      const topGenreEntry = Object.entries(books.reduce((a, b) => { a[b.genre] = (a[b.genre] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1])[0];
-      const topGenre = topGenreEntry ? topGenreEntry[0] : "Fiction";
-      const avgRating = total > 0 ? (books.reduce((a, b) => a + (b.rating || 0), 0) / total).toFixed(1) : "5.0";
-      const faveBook = books.find(b => b.rating === 5) || books[0];
-      const [copied, setCopied] = useState(false);
-
-      const handleShare = () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 3000);
-      };
-
-      return (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 350, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px" }} onClick={onClose}>
-          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: "380px" }}>
-            <div style={{ background: "linear-gradient(145deg, #0E1A14 0%, #171A2E 55%, #18223E 100%)", borderRadius: 24, padding: "30px 24px", border: "1px solid rgba(255,255,255,0.12)", position: "relative", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
-              <div style={{ position: "absolute", top: -40, right: -40, width: 200, height: 200, borderRadius: "50%", background: "radial-gradient(circle, rgba(232,196,160,0.12), transparent 70%)", pointerEvents: "none" }} />
-              
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--accent-gold)", textTransform: "uppercase", letterSpacing: "2.5px", fontWeight: 700 }}>
-                    book nook · wrapped
-                  </div>
-                  <div style={{ fontSize: 24, fontFamily: "var(--font-serif)", fontWeight: 700, marginTop: 4 }}>
-                    {user?.name || "Reader"}'s 2026<br />Reading Year
-                  </div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 44, fontFamily: "var(--font-serif)", fontWeight: 700, color: "var(--accent-gold)", lineHeight: 1 }}>
-                    {total}
-                  </div>
-                  <div style={{ fontSize: 10, color: "#8E8A82", textTransform: "uppercase", letterSpacing: "1px", marginTop: 2 }}>
-                    books read
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ height: 1, background: "linear-gradient(90deg, rgba(232,196,160,0.3), transparent)", marginBottom: 18 }} />
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-                {[
-                  { label: "Pages Turned", value: pages.toLocaleString(), color: "#A0C4E8" },
-                  { label: "Avg Rating", value: `${avgRating} ★`, color: "#F5C842" },
-                  { label: "Top Genre", value: topGenre, color: "#C4A0E8" },
-                  { label: "5★ Gems", value: books.filter(b => b.rating === 5).length, color: "#A0E8A0" },
-                ].map(s => (
-                  <div key={s.label} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style={{ fontSize: 18, fontFamily: "var(--font-serif)", fontWeight: 700, color: s.color }}>{s.value}</div>
-                    <div style={{ fontSize: 9, color: "#777", textTransform: "uppercase", letterSpacing: "1px", marginTop: 2 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {faveBook && (
-                <div style={{ background: "rgba(232,196,160,0.08)", border: "1px solid rgba(232,196,160,0.2)", borderRadius: 14, padding: "12px 16px", marginBottom: 16 }}>
-                  <div style={{ fontSize: 9, color: "var(--accent-gold)", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700, marginBottom: 4 }}>
-                    ✨ Favorite Story of the Year
-                  </div>
-                  <div style={{ fontSize: 15, fontFamily: "var(--font-serif)", fontWeight: 700 }}>{faveBook.title}</div>
-                  <div style={{ fontSize: 11, color: "#8E8A82", marginTop: 2 }}>{faveBook.author}</div>
-                </div>
-              )}
-
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 4 }}>
-                <div style={{ fontSize: 11, color: "#777" }}>booknook.app · {user?.avatar || "📚"}</div>
-                <div style={{ fontSize: 14 }}>🌟 💫 📖</div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <Btn onClick={onClose} variant="ghost" style={{ flex: 1 }}>Close</Btn>
-              <Btn onClick={handleShare} variant="solid" style={{ flex: 2 }}>
-                {copied ? "✓ Link & Card Copied!" : "Share Year Card 🔗"}
-              </Btn>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // ─── Nearby Map View Component ────────────────────────────────────────────────
-
-    function NearbyMapView({ listings, onOffer, myOffers }) {
-      const [selected, setSelected] = useState(null);
-
-      const bounds = { minLat: 50.5, maxLat: 56.5, minLng: -3.5, maxLng: 0.5 };
-      const toX = lng => Math.min(Math.max(((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100, 8), 92);
-      const toY = lat => Math.min(Math.max((1 - (lat - bounds.minLat) / (bounds.maxLat - bounds.minLat)) * 100, 8), 92);
-
-      const typeColor = { give: "#A0E8B8", trade: "#A0C4E8", open: "#E8C4A0" };
-
-      return (
-        <div>
-          <SectionHead>Local Reader Map (Near You)</SectionHead>
-          
-          <div style={{ width: "100%", aspectRatio: "16/10", background: "#0c0f18", borderRadius: 20, border: "1px solid rgba(255,255,255,0.1)", position: "relative", overflow: "hidden", marginBottom: 16, boxShadow: "inset 0 0 30px rgba(0,0,0,0.7)" }}>
-            {[25, 50, 75].map(p => (
-              <React.Fragment key={p}>
-                <div style={{ position: "absolute", left: 0, right: 0, top: `${p}%`, height: 1, background: "rgba(255,255,255,0.03)" }} />
-                <div style={{ position: "absolute", top: 0, bottom: 0, left: `${p}%`, width: 1, background: "rgba(255,255,255,0.03)" }} />
-              </React.Fragment>
-            ))}
-
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 90, opacity: 0.05, pointerEvents: "none", userSelect: "none" }}>
-              🗺️
-            </div>
-
-            {listings.map(l => {
-              const isSelected = selected?.id === l.id;
-              const col = typeColor[l.type] || "#E8C4A0";
-              return (
-                <button
-                  key={l.id}
-                  onClick={() => setSelected(isSelected ? null : l)}
-                  style={{
-                    position: "absolute",
-                    left: `${toX(l.lng)}%`,
-                    top: `${toY(l.lat)}%`,
-                    transform: "translate(-50%, -50%)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
-                    zIndex: isSelected ? 20 : 5,
-                    transition: "transform 0.2s ease"
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                    <div
-                      style={{
-                        background: col,
-                        borderRadius: "50% 50% 50% 0",
-                        width: 28,
-                        height: 28,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        transform: "rotate(-45deg)",
-                        boxShadow: `0 4px 14px ${col}77`,
-                        border: `2px solid ${isSelected ? "#fff" : "transparent"}`
-                      }}
-                    >
-                      <span style={{ transform: "rotate(45deg)", fontSize: 13 }}>📖</span>
-                    </div>
-                    <div style={{ fontSize: 9, color: "#fff", background: "rgba(0,0,0,0.7)", padding: "2px 6px", borderRadius: 8, marginTop: 4, whiteSpace: "nowrap", border: "1px solid rgba(255,255,255,0.1)" }}>
-                      {l.location.split(" ")[0]}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-
-            <div style={{ position: "absolute", bottom: 10, left: 10, display: "flex", gap: 8, background: "rgba(10,12,18,0.85)", padding: "4px 10px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(8px)" }}>
-              {[{ c: "#A0E8B8", l: "Free" }, { c: "#A0C4E8", l: "Trade" }, { c: "#E8C4A0", l: "Open" }].map(x => (
-                <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: x.c }} />
-                  <span style={{ fontSize: 10, color: "#8E8A82" }}>{x.l}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {selected && (
-            <div className="animate-slide-up" style={{ background: "rgba(232,196,160,0.08)", border: "1px solid rgba(232,196,160,0.25)", borderRadius: 16, padding: "16px", marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 16, fontFamily: "var(--font-serif)", fontWeight: 700 }}>{selected.book}</div>
-                  <div style={{ fontSize: 12, color: "#8E8A82", marginTop: 2 }}>{selected.author} · Condition: {selected.condition}</div>
-                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <TypeBadge type={selected.type} wantGenre={selected.wantGenre} />
-                  </div>
-                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 8 }}>
-                    📍 {selected.location} · {selected.canPost ? "📦 Free postage or meetup" : "🤝 Collect only"}
-                  </div>
-                </div>
-                <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: "#888", cursor: "pointer", fontSize: 20, padding: "0 0 0 8px" }}>
-                  ×
-                </button>
-              </div>
-
-              <div style={{ marginTop: 14 }}>
-                {myOffers.has(selected.id) ? (
-                  <div style={{ fontSize: 12, color: "#A0E8B8", textAlign: "center", padding: "8px", background: "rgba(160,232,184,0.1)", borderRadius: 12 }}>
-                    ✓ Request Sent to {selected.owner}
-                  </div>
-                ) : (
-                  <Btn onClick={() => onOffer(selected)} variant={selected.type === "give" ? "solid" : "outline"} style={{ width: "100%", padding: 11 }}>
-                    {selected.type === "give" ? "Request Free Copy 🎁" : "Make Trade Offer 🤝"}
-                  </Btn>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {listings.filter(l => !selected || l.id !== selected.id).map(l => (
-              <div
-                key={l.id}
-                onClick={() => setSelected(l)}
-                style={{
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  borderRadius: 14,
-                  padding: "12px 14px",
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "center",
-                  cursor: "pointer",
-                  transition: "all 0.2s"
-                }}
-              >
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: typeColor[l.type] || "#E8C4A0", flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontFamily: "var(--font-serif)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {l.book}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#777", marginTop: 2 }}>📍 {l.location} · {l.condition}</div>
-                </div>
-                <TypeBadge type={l.type} />
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    // ─── List My Book Sheet ───────────────────────────────────────────────────────
-
-    function ListMyBookSheet({ myBooks, userLocation, onClose, onList }) {
-      const [step, setStep] = useState("book");
-      const [chosen, setChosen] = useState(null);
-      const [customBook, setCustomBook] = useState({ title: "", author: "", genre: "Fiction" });
-      const [type, setType] = useState("open");
-      const [wantGenre, setWantGenre] = useState("");
-      const [wantSpecific, setWantSpecific] = useState("");
-      const [condition, setCondition] = useState("Good");
-      const [canPost, setCanPost] = useState(true);
-      const [note, setNote] = useState("");
-      const [done, setDone] = useState(false);
-
-      const submit = async () => {
-        const bookTitle = chosen ? chosen.title : customBook.title;
-        const bookAuthor = chosen ? chosen.author : customBook.author;
-        const bookGenre = chosen ? chosen.genre : customBook.genre;
-
-        const listingData = {
-          type,
-          wantGenre: type === "trade" ? wantGenre : null,
-          wantSpecific: type === "trade" && wantSpecific ? wantSpecific : null,
-          book: bookTitle,
-          author: bookAuthor,
-          genre: bookGenre,
-          condition,
-          canPost,
-          note,
-          location: fuzzyLocation(userLocation || "London")
-        };
-
-        try {
-          const res = await apiClient.createListing(listingData);
-          onList(res.listing);
-        } catch (e) {
-          onList({
-            id: Date.now(),
-            ...listingData,
-            owner: "You",
-            ownerBg: "linear-gradient(135deg, #E8C4A0, #C4A070)",
-            ownerKarma: 10,
-            lat: 51.5,
-            lng: -0.12,
-            offers: [],
-            time: "Just now"
-          });
-        }
-        setDone(true);
-      };
-
-      if (done) {
-        return (
-          <Sheet onClose={onClose} title="Listed Successfully! 📬">
-            <div style={{ textAlign: "center", padding: "24px 0" }}>
-              <div style={{ fontSize: 52, marginBottom: 16 }}>📬</div>
-              <div style={{ fontSize: 18, fontFamily: "var(--font-serif)", fontWeight: 700, marginBottom: 8 }}>Your book is on the Exchange</div>
-              <div style={{ fontSize: 13, color: "#8E8A82", lineHeight: 1.6, marginBottom: 24 }}>
-                Readers in your area will see your listing. You'll receive offers directly in your notifications!
-              </div>
-              <Btn onClick={onClose} variant="solid" style={{ width: "100%" }}>
-                Done
-              </Btn>
-            </div>
-          </Sheet>
-        );
-      }
-
-      return (
-        <Sheet onClose={onClose} title={step === "book" ? "Which Book to Share?" : "Exchange Details"} subtitle="Pass on a great story to another reader">
-          {step === "book" && (
-            <div>
-              <div style={{ fontSize: 13, color: "#8E8A82", marginBottom: 14 }}>Select from your shelf:</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
-                {myBooks.map(b => (
-                  <button
-                    key={b.id}
-                    onClick={() => { setChosen(b); setStep("details"); }}
-                    style={{
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      borderRadius: 14,
-                      padding: "12px 14px",
-                      display: "flex",
-                      gap: 12,
-                      alignItems: "center",
-                      cursor: "pointer",
-                      textAlign: "left",
-                      width: "100%"
-                    }}
-                  >
-                    <div style={{ width: 34, height: 48, borderRadius: 6, background: `linear-gradient(135deg, ${b.cover || "#2A2A2A"}, #C4A070)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
-                      📗
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontFamily: "var(--font-serif)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#F0EBE1" }}>
-                        {b.title}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#8E8A82", marginTop: 2 }}>{b.author}</div>
-                    </div>
-                    <div style={{ fontSize: 14, color: "var(--accent-gold)" }}>→</div>
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 16 }}>
-                <div style={{ fontSize: 12, color: "#aaa", fontWeight: 500, marginBottom: 8 }}>Or enter a different book:</div>
-                <Input value={customBook.title} onChange={e => setCustomBook(p => ({ ...p, title: sanitize(e.target.value) }))} placeholder="Book title…" style={{ marginBottom: 8 }} />
-                <Input value={customBook.author} onChange={e => setCustomBook(p => ({ ...p, author: sanitize(e.target.value) }))} placeholder="Author name…" style={{ marginBottom: 12 }} />
-                <Btn
-                  onClick={() => {
-                    if (!customBook.title.trim()) return;
-                    setChosen(null);
-                    setStep("details");
-                  }}
-                  disabled={!customBook.title.trim()}
-                  variant="outline"
-                  style={{ width: "100%" }}
-                >
-                  Continue with Custom Book →
-                </Btn>
-              </div>
-            </div>
-          )}
-
-          {step === "details" && (
-            <div>
-              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.08)", marginBottom: 14, display: "flex", gap: 10, alignItems: "center" }}>
-                <div style={{ fontSize: 24 }}>📗</div>
-                <div>
-                  <div style={{ fontSize: 15, fontFamily: "var(--font-serif)", fontWeight: 700 }}>{chosen ? chosen.title : customBook.title}</div>
-                  <div style={{ fontSize: 12, color: "#8E8A82" }}>{chosen ? chosen.author : customBook.author}</div>
-                </div>
-              </div>
-
-              <Label>Exchange Type</Label>
-              <div style={{ display: "flex", gap: 8 }}>
-                {[
-                  { v: "give", l: "🎁 Free Giveaway" },
-                  { v: "open", l: "🔄 Open Trade" },
-                  { v: "trade", l: "🎯 Specific Request" }
-                ].map(o => (
-                  <button
-                    key={o.v}
-                    onClick={() => setType(o.v)}
-                    style={{
-                      flex: 1,
-                      padding: "10px 4px",
-                      borderRadius: 12,
-                      cursor: "pointer",
-                      textAlign: "center",
-                      border: `1px solid ${type === o.v ? "var(--accent-gold)" : "rgba(255,255,255,0.08)"}`,
-                      background: type === o.v ? "rgba(232,196,160,0.15)" : "rgba(255,255,255,0.03)"
-                    }}
-                  >
-                    <div style={{ fontSize: 11, fontWeight: 600, color: type === o.v ? "var(--accent-gold)" : "#aaa" }}>{o.l}</div>
-                  </button>
-                ))}
-              </div>
-
-              {type === "trade" && (
-                <>
-                  <Label>Genre Wanted in Return</Label>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {GENRES.map(g => (
-                      <button
-                        key={g}
-                        onClick={() => setWantGenre(g === wantGenre ? "" : g)}
-                        style={{
-                          padding: "5px 12px",
-                          borderRadius: 20,
-                          fontSize: 11,
-                          cursor: "pointer",
-                          border: `1px solid ${wantGenre === g ? "rgba(160,196,232,0.5)" : "rgba(255,255,255,0.1)"}`,
-                          background: wantGenre === g ? "rgba(160,196,232,0.15)" : "transparent",
-                          color: wantGenre === g ? "#A0C4E8" : "#888"
-                        }}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                  <Label>Specific Wishlist Title (Optional)</Label>
-                  <Input value={wantSpecific} onChange={e => setWantSpecific(sanitize(e.target.value))} placeholder="e.g. Any book by Ursula K. Le Guin" />
-                </>
-              )}
-
-              <Label>Condition</Label>
-              <div style={{ display: "flex", gap: 8 }}>
-                {["Like New", "Good", "Fair", "Well Loved"].map(c => (
-                  <button
-                    key={c}
-                    onClick={() => setCondition(c)}
-                    style={{
-                      flex: 1,
-                      padding: "8px 4px",
-                      borderRadius: 10,
-                      fontSize: 11,
-                      cursor: "pointer",
-                      border: `1px solid ${condition === c ? "var(--accent-gold)" : "rgba(255,255,255,0.08)"}`,
-                      background: condition === c ? "rgba(232,196,160,0.15)" : "transparent",
-                      color: condition === c ? "var(--accent-gold)" : "#888"
-                    }}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-
-              <Label>Handover & Postage</Label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={() => setCanPost(false)}
-                  style={{
-                    flex: 1,
-                    padding: "10px 8px",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                    border: `1px solid ${!canPost ? "rgba(160,232,184,0.5)" : "rgba(255,255,255,0.08)"}`,
-                    background: !canPost ? "rgba(160,232,184,0.15)" : "transparent"
-                  }}
-                >
-                  <div style={{ fontSize: 18, marginBottom: 3 }}>🤝</div>
-                  <div style={{ fontSize: 12, color: !canPost ? "#A0E8B8" : "#888", fontWeight: 600 }}>Meetup Only</div>
-                  <div style={{ fontSize: 10, color: "#666", marginTop: 2 }}>{userLocation || "Local area"}</div>
-                </button>
-                <button
-                  onClick={() => setCanPost(true)}
-                  style={{
-                    flex: 1,
-                    padding: "10px 8px",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                    border: `1px solid ${canPost ? "rgba(160,196,232,0.5)" : "rgba(255,255,255,0.08)"}`,
-                    background: canPost ? "rgba(160,196,232,0.15)" : "transparent"
-                  }}
-                >
-                  <div style={{ fontSize: 18, marginBottom: 3 }}>📦</div>
-                  <div style={{ fontSize: 12, color: canPost ? "#A0E8B8" : "#888", fontWeight: 600 }}>Post or Meetup</div>
-                  <div style={{ fontSize: 10, color: "#666", marginTop: 2 }}>Split shipping by agreement</div>
-                </button>
-              </div>
-
-              <Label>Note to Reader (Optional)</Label>
-              <textarea
-                value={note}
-                onChange={e => setNote(sanitize(e.target.value))}
-                placeholder="Why did you enjoy this book? Any favorite quotes or memories?"
-                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "12px 14px", color: "#F0EBE1", fontSize: 13, resize: "none", height: 70, outline: "none", lineHeight: 1.5 }}
-              />
-
-              <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-                <Btn onClick={() => setStep("book")} variant="ghost" style={{ flex: 1 }}>Back</Btn>
-                <Btn onClick={submit} variant="solid" style={{ flex: 2 }}>
-                  Publish Listing 📬
-                </Btn>
-              </div>
-            </div>
-          )}
-        </Sheet>
-      );
-    }
-
-    // ─── Make Offer / Request Sheet ───────────────────────────────────────────────
-
-    function OfferSheet({ listing, onClose, onSubmit }) {
-      const [bookOffer, setBookOffer] = useState("");
-      const [message, setMessage] = useState("");
-      const [done, setDone] = useState(false);
-      const [rateLimited, setRateLimited] = useState(false);
-
-      const submit = async () => {
-        if (!rateLimiter.check("offer_submit", 3)) {
-          setRateLimited(true);
-          setTimeout(() => setRateLimited(false), 60000);
-          return;
-        }
-
-        try {
-          await apiClient.submitOffer(listing.id, { bookOffer: sanitize(bookOffer), message: sanitize(message) });
-        } catch (e) {
-          console.warn("Offer API notice:", e.message);
-        }
-
-        onSubmit(listing.id, {
-          user: "You",
-          userBg: "#E8C4A0",
-          bookOffer: sanitize(bookOffer),
-          message: sanitize(message),
-          time: "Just now"
-        });
-        setDone(true);
-      };
-
-      return (
-        <Sheet onClose={onClose} title={listing.type === "give" ? "Request Free Copy" : "Make Trade Offer"}>
-          {done ? (
-            <div style={{ textAlign: "center", padding: "28px 0" }}>
-              <div style={{ fontSize: 52, marginBottom: 14 }}>🎉</div>
-              <div style={{ fontSize: 18, fontFamily: "var(--font-serif)", fontWeight: 700, marginBottom: 8 }}>
-                {listing.type === "give" ? "Request Dispatched!" : "Offer Sent to Owner!"}
-              </div>
-              <div style={{ fontSize: 13, color: "#8E8A82", lineHeight: 1.65, marginBottom: 24 }}>
-                {listing.owner} will be notified. Once they accept, you'll be connected to arrange handoff or postage. +5 Book Karma earned!
-              </div>
-              <Btn onClick={onClose} variant="solid" style={{ width: "100%" }}>Done</Btn>
-            </div>
-          ) : (
-            <div>
-              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "14px", border: "1px solid rgba(255,255,255,0.08)", marginBottom: 12, display: "flex", gap: 12, alignItems: "center" }}>
-                <div style={{ fontSize: 32 }}>📗</div>
-                <div>
-                  <div style={{ fontSize: 15, fontFamily: "var(--font-serif)", fontWeight: 700 }}>{listing.book}</div>
-                  <div style={{ fontSize: 12, color: "#8E8A82" }}>{listing.author} · Condition: {listing.condition}</div>
-                  <div style={{ marginTop: 6 }}><TypeBadge type={listing.type} wantGenre={listing.wantGenre} /></div>
-                </div>
-              </div>
-
-              {listing.type !== "give" && (
-                <>
-                  <Label>Book You Are Offering in Return</Label>
-                  <Input value={bookOffer} onChange={e => setBookOffer(sanitize(e.target.value))} placeholder="e.g. The Hobbit by J.R.R. Tolkien" />
-                  {listing.wantSpecific && (
-                    <div style={{ fontSize: 11, color: "#A0C4E8", marginTop: 6, fontStyle: "italic" }}>
-                      💡 Owner is looking for: "{listing.wantSpecific}"
-                    </div>
-                  )}
-                </>
-              )}
-
-              <Label>{listing.type === "give" ? "Why would you love this book? (Optional)" : "Friendly Message (Optional)"}</Label>
-              <textarea
-                value={message}
-                onChange={e => setMessage(sanitize(e.target.value))}
-                placeholder={listing.type === "give" ? "Introduce yourself as a reader…" : "Say hello and suggest a convenient meetup spot!"}
-                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "12px 14px", color: "#F0EBE1", fontSize: 13, resize: "none", height: 74, outline: "none", lineHeight: 1.5 }}
-              />
-
-              <div style={{ background: "rgba(232,196,160,0.08)", borderRadius: 12, padding: "12px 14px", border: "1px solid rgba(232,196,160,0.18)", marginTop: 14, marginBottom: 20 }}>
-                <div style={{ fontSize: 12, color: "var(--accent-gold)", fontWeight: 600, marginBottom: 2 }}>🤝 100% Cashless Book Exchange</div>
-                <div style={{ fontSize: 11, color: "#8E8A82", lineHeight: 1.5 }}>Every completed exchange earns you +5 community book karma points.</div>
-              </div>
-
-              <div style={{ display: "flex", gap: 10 }}>
-                <Btn onClick={onClose} variant="ghost" style={{ flex: 1 }}>Cancel</Btn>
-                <Btn
-                  onClick={submit}
-                  disabled={(listing.type !== "give" && !bookOffer.trim()) || rateLimited}
-                  variant="solid"
-                  style={{ flex: 2 }}
-                >
-                  {rateLimited ? "⏳ Please wait…" : listing.type === "give" ? "Submit Request 🙏" : "Send Trade Offer 🤝"}
-                </Btn>
-              </div>
-            </div>
-          )}
-        </Sheet>
-      );
-    }
-
-    // ─── Create New Activity Post Sheet ───────────────────────────────────────────
-
-    function NewPostSheet({ user, books, onClose, onPost }) {
-      const [bookTitle, setBookTitle] = useState(books[0]?.title || "");
-      const [action, setAction] = useState("finished");
-      const [rating, setRating] = useState(5);
-      const [thought, setThought] = useState("");
-      const [community, setCommunity] = useState("Literary Fiction");
-
-      const handleSubmit = async () => {
-        if (!thought.trim()) return;
-        const matchingBook = books.find(b => b.title === bookTitle);
-        const postData = {
-          book: bookTitle,
-          author: matchingBook?.author || "Favorite Author",
-          action,
-          rating: action === "finished" ? rating : null,
-          thought: sanitize(thought),
-          community
-        };
-
-        try {
-          const res = await apiClient.createPost(postData);
-          onPost(res.post);
-        } catch (e) {
-          onPost({
-            id: Date.now(),
-            user: user?.name || "You",
-            av: user?.name?.[0] || "Y",
-            bg: "#E8C4A0",
-            ...postData,
-            time: "Just now",
-            likes: 0,
-            replies: []
-          });
-        }
-        onClose();
-      };
-
-      return (
-        <Sheet onClose={onClose} title="Share with Readers" subtitle="Post thoughts, reviews, or current updates to the community feed">
-          <Label>Select Book</Label>
-          <select
-            value={bookTitle}
-            onChange={e => setBookTitle(e.target.value)}
-            style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "12px", color: "#F0EBE1", fontSize: 14, outline: "none" }}
-          >
-            {books.map(b => (
-              <option key={b.id} value={b.title} style={{ background: "#141722", color: "#fff" }}>
-                {b.title} — {b.author}
-              </option>
-            ))}
-          </select>
-
-          <Label>Activity Type</Label>
-          <div style={{ display: "flex", gap: 8 }}>
-            {[
-              { v: "finished", l: "🎉 Finished reading" },
-              { v: "currently reading", l: "📖 Currently reading" },
-              { v: "reviewed", l: "⭐ Book review" }
-            ].map(a => (
-              <button
-                key={a.v}
-                onClick={() => setAction(a.v)}
-                style={{
-                  flex: 1,
-                  padding: "9px 4px",
-                  borderRadius: 10,
-                  fontSize: 11,
-                  cursor: "pointer",
-                  border: `1px solid ${action === a.v ? "var(--accent-gold)" : "rgba(255,255,255,0.08)"}`,
-                  background: action === a.v ? "rgba(232,196,160,0.15)" : "transparent",
-                  color: action === a.v ? "var(--accent-gold)" : "#888"
-                }}
-              >
-                {a.l}
-              </button>
-            ))}
-          </div>
-
-          {action !== "currently reading" && (
-            <>
-              <Label>Your Star Rating</Label>
-              <div style={{ padding: "8px 0" }}>
-                <Stars n={rating} size={20} interactive={true} onRate={setRating} />
-              </div>
-            </>
-          )}
-
-          <Label>Community Channel</Label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {COMMUNITIES.map(c => (
-              <button
-                key={c.id}
-                onClick={() => setCommunity(c.name)}
-                style={{
-                  padding: "5px 12px",
-                  borderRadius: 20,
-                  fontSize: 11,
-                  border: `1px solid ${community === c.name ? "var(--accent-gold)" : "rgba(255,255,255,0.08)"}`,
-                  background: community === c.name ? "rgba(232,196,160,0.15)" : "transparent",
-                  color: community === c.name ? "var(--accent-gold)" : "#888",
-                  cursor: "pointer"
-                }}
-              >
-                {c.emoji} {c.name}
-              </button>
-            ))}
-          </div>
-
-          <Label>Your Thoughts & Reflection</Label>
-          <textarea
-            value={thought}
-            onChange={e => setThought(e.target.value)}
-            placeholder="What made this memorable? Write an engaging review or takeaway…"
-            style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "12px 14px", color: "#F0EBE1", fontSize: 13, resize: "none", height: 90, outline: "none", lineHeight: 1.5 }}
-          />
-
-          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-            <Btn onClick={onClose} variant="ghost" style={{ flex: 1 }}>Cancel</Btn>
-            <Btn onClick={handleSubmit} disabled={!thought.trim()} variant="solid" style={{ flex: 2 }}>
-              Publish Post ✨
-            </Btn>
-          </div>
-        </Sheet>
-      );
-    }
-
-    // ─── Log Reading Progress Sheet ───────────────────────────────────────────────
-
-    function LogProgressSheet({ currentBook, onUpdate, onClose }) {
-      const [pagesRead, setPagesRead] = useState(currentBook.read || 0);
-
-      const addPages = (n) => {
-        setPagesRead(p => Math.min(currentBook.pages, p + n));
-      };
-
-      const handleSave = () => {
-        onUpdate({
-          ...currentBook,
-          read: pagesRead,
-          streak: (currentBook.streak || 14) + 1
-        });
-        onClose();
-      };
-
-      const pct = Math.round((pagesRead / currentBook.pages) * 100);
-
-      return (
-        <Sheet onClose={onClose} title="Log Reading Progress" subtitle={`Update your daily pages for "${currentBook.title}"`}>
-          <div style={{ textAlign: "center", padding: "12px 0 20px" }}>
-            <div style={{ fontSize: 44, fontFamily: "var(--font-serif)", fontWeight: 700, color: "var(--accent-gold)" }}>
-              {pagesRead} <span style={{ fontSize: 18, color: "#8E8A82" }}>/ {currentBook.pages} p</span>
-            </div>
-            <div style={{ fontSize: 14, color: "#aaa", marginTop: 4 }}>{pct}% completed</div>
-            
-            <div style={{ height: 8, background: "rgba(255,255,255,0.08)", borderRadius: 4, margin: "16px 0", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg, #E8C4A0, #A0E8B8)", borderRadius: 4, transition: "width 0.3s ease" }} />
-            </div>
-
-            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>
-              {[10, 25, 50].map(n => (
-                <button
-                  key={n}
-                  onClick={() => addPages(n)}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: 20,
-                    fontSize: 12,
-                    background: "rgba(232,196,160,0.12)",
-                    border: "1px solid rgba(232,196,160,0.3)",
-                    color: "var(--accent-gold)",
-                    cursor: "pointer",
-                    fontWeight: 600
-                  }}
-                >
-                  +{n} pages
-                </button>
-              ))}
-              <button
-                onClick={() => setPagesRead(currentBook.pages)}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 20,
-                  fontSize: 12,
-                  background: "rgba(160,232,184,0.15)",
-                  border: "1px solid rgba(160,232,184,0.4)",
-                  color: "#A0E8B8",
-                  cursor: "pointer",
-                  fontWeight: 600
-                }}
-              >
-                Finished! 🎉
-              </button>
-            </div>
-          </div>
-
-          <Btn onClick={handleSave} variant="solid" style={{ width: "100%", padding: 15 }}>
-            Save Progress & Extend Streak 🔥
-          </Btn>
-        </Sheet>
-      );
-    }
-
     // ─── Main Application Component ───────────────────────────────────────────────
 
     function BookNookApp() {
@@ -3100,6 +2113,7 @@
       const [showCookieSettings, setShowCookieSettings] = useState(false);
       const [deferredPrompt, setDeferredPrompt] = useState(null);
       const [showInstallBanner, setShowInstallBanner] = useState(false);
+      const [updateAvailable, setUpdateAvailable] = useState(false);
       
       const [books, setBooks] = useState(savedState?.books || MY_BOOKS_INITIAL);
       const [currentBook, setCurrentBook] = useState(savedState?.currentBook || {
@@ -3123,22 +2137,30 @@
       const [replyText, setReplyText] = useState("");
       const [showProfile, setShowProfile] = useState(false);
       const [offerTarget, setOfferTarget] = useState(null);
-      const [selectedBook, setSelectedBook] = useState(null);
       const [activeTradeRoom, setActiveTradeRoom] = useState(null);
       
       const [marketFilter, setMarketFilter] = useState("all");
       const [marketView, setMarketView] = useState("list");
       const [userKarma, setUserKarma] = useState(savedState?.userKarma || 25);
 
-      // PWA Install Prompt Listener
+      // PWA Update & Install Prompt Listeners
       useEffect(() => {
-        const handler = e => {
+        const installHandler = e => {
           e.preventDefault();
           setDeferredPrompt(e);
           setShowInstallBanner(true);
         };
-        window.addEventListener('beforeinstallprompt', handler);
-        return () => window.removeEventListener('beforeinstallprompt', handler);
+        const updateHandler = () => {
+          setUpdateAvailable(true);
+        };
+
+        window.addEventListener('beforeinstallprompt', installHandler);
+        window.addEventListener('pwa-update-ready', updateHandler);
+
+        return () => {
+          window.removeEventListener('beforeinstallprompt', installHandler);
+          window.removeEventListener('pwa-update-ready', updateHandler);
+        };
       }, []);
 
       const handleInstallApp = async () => {
@@ -3149,6 +2171,13 @@
           setShowInstallBanner(false);
         }
         setDeferredPrompt(null);
+      };
+
+      const handleRefreshUpdate = () => {
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ action: 'SKIP_WAITING' });
+        }
+        window.location.reload();
       };
 
       // Fetch live data from backend API on mount / authentication
@@ -3260,8 +2289,23 @@
       return (
         <div style={{ minHeight: "100vh", background: "#0A0B0E", color: "#F0EBE1", display: "flex", flexDirection: "column", position: "relative" }}>
           
+          {/* PWA v0.1 Update Notification Banner */}
+          {updateAvailable && (
+            <div style={{ background: "linear-gradient(90deg, #E8C4A0, #B89368)", color: "#0A0B0E", padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 160, boxShadow: "0 4px 14px rgba(232,196,160,0.3)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700 }}>
+                <span>✨</span> Book Nook v0.1 Update Ready
+              </div>
+              <button
+                onClick={handleRefreshUpdate}
+                style={{ background: "#0A0B0E", border: "none", borderRadius: 14, color: "var(--accent-gold)", padding: "4px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+              >
+                Refresh Now 🔄
+              </button>
+            </div>
+          )}
+
           {/* PWA Install Banner */}
-          {showInstallBanner && (
+          {showInstallBanner && !updateAvailable && (
             <div style={{ background: "linear-gradient(90deg, #1E2333, #141722)", borderBottom: "1px solid rgba(232,196,160,0.3)", padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 150 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 20 }}>📲</span>
@@ -3280,13 +2324,13 @@
           )}
 
           {/* Top Header */}
-          <header style={{ padding: "44px 22px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: showInstallBanner ? 48 : 0, background: "rgba(10, 11, 14, 0.94)", backdropFilter: "blur(18px)", zIndex: 100, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          <header style={{ padding: "44px 22px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: updateAvailable ? 44 : showInstallBanner ? 48 : 0, background: "rgba(10, 11, 14, 0.94)", backdropFilter: "blur(18px)", zIndex: 100, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <div style={{ fontSize: 24, fontFamily: "var(--font-serif)", fontWeight: 700, letterSpacing: "-0.5px" }}>
                 book nook<span style={{ color: "var(--accent-gold)" }}>.</span>
               </div>
               <span style={{ fontSize: 10, color: "var(--accent-gold)", fontWeight: 600, background: "rgba(232,196,160,0.12)", padding: "2px 6px", borderRadius: 10 }}>
-                ⭐ {userKarma} karma
+                v0.1 · ⭐ {userKarma}
               </span>
             </div>
 
@@ -3308,24 +2352,6 @@
                 }}
               >
                 <span>💬</span> Trades
-              </button>
-              <button
-                onClick={() => setModal("ai")}
-                style={{
-                  background: "rgba(232,196,160,0.1)",
-                  border: "1px solid rgba(232,196,160,0.3)",
-                  borderRadius: 20,
-                  padding: "7px 12px",
-                  color: "var(--accent-gold)",
-                  fontSize: 12,
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5
-                }}
-              >
-                <span>✨</span> For You
               </button>
               <div
                 onClick={() => setShowProfile(true)}
@@ -3349,7 +2375,7 @@
           </header>
 
           {/* Navigation Tab Bar */}
-          <div style={{ display: "flex", margin: "10px 20px 4px", background: "rgba(255,255,255,0.04)", borderRadius: 16, padding: "4px", position: "sticky", top: showInstallBanner ? 136 : 88, zIndex: 90, backdropFilter: "blur(14px)", border: "1px solid rgba(255,255,255,0.06)" }}>
+          <div style={{ display: "flex", margin: "10px 20px 4px", background: "rgba(255,255,255,0.04)", borderRadius: 16, padding: "4px", position: "sticky", top: updateAvailable ? 92 : showInstallBanner ? 136 : 88, zIndex: 90, backdropFilter: "blur(14px)", border: "1px solid rgba(255,255,255,0.06)" }}>
             {tabs.map(t => {
               const active = tab === t.id;
               return (
@@ -3431,9 +2457,6 @@
                           <div style={{ fontSize: 22, marginBottom: 6 }}>{c.emoji}</div>
                           <div style={{ fontSize: 13, fontWeight: 600, color: "#F0EBE1", lineHeight: 1.3 }}>{c.name}</div>
                           <div style={{ fontSize: 10, color: "#8E8A82", marginTop: 3 }}>{c.members} members</div>
-                          <div style={{ marginTop: 8, fontSize: 11, color: isJoined ? "var(--accent-gold)" : "#777", fontWeight: 600 }}>
-                            {isJoined ? "✓ Joined" : "+ Join Club"}
-                          </div>
                         </button>
                       );
                     })}
@@ -3446,7 +2469,6 @@
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {filteredFeedPosts.map(post => {
                       const isLiked = likedPosts[post.id];
-                      const isSaved = savedPosts.has(post.id);
                       return (
                         <Card key={post.id}>
                           <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
@@ -3490,30 +2512,10 @@
                               onClick={() => setReplyPostId(replyPostId === post.id ? null : post.id)}
                               style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: replyPostId === post.id ? "var(--accent-gold)" : "#888", fontWeight: 500 }}
                             >
-                              💬 Reply {post.replies?.length ? `(${post.replies.length})` : ""}
-                            </button>
-                            <button
-                              onClick={() => setSavedPosts(p => {
-                                const n = new Set(p);
-                                n.has(post.id) ? n.delete(post.id) : n.add(post.id);
-                                return n;
-                              })}
-                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: isSaved ? "var(--accent-gold)" : "#888", fontWeight: 500 }}
-                            >
-                              {isSaved ? "📌 Saved" : "📌 Save"}
+                              💬 Reply
                             </button>
                             <ReportButton contentId={`post-${post.id}`} type="post" />
                           </div>
-
-                          {post.replies && post.replies.length > 0 && (
-                            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                              {post.replies.map((rep, idx) => (
-                                <div key={idx} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "8px 12px", fontSize: 12, color: "#ccc" }}>
-                                  <strong style={{ color: "var(--accent-gold)" }}>{rep.user}:</strong> {rep.text}
-                                </div>
-                              ))}
-                            </div>
-                          )}
 
                           {replyPostId === post.id && (
                             <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
@@ -3532,20 +2534,6 @@
                                   }
                                 }}
                               />
-                              <Btn
-                                onClick={() => {
-                                  if (replyText.trim()) {
-                                    apiClient.replyPost(post.id, replyText).catch(() => {});
-                                    setFeedPosts(prev => prev.map(p => p.id === post.id ? { ...p, replies: [...(p.replies || []), { user: user?.name || "You", text: replyText }] } : p));
-                                    setReplyText("");
-                                    setReplyPostId(null);
-                                  }
-                                }}
-                                variant="solid"
-                                style={{ padding: "8px 14px", fontSize: 11 }}
-                              >
-                                Send
-                              </Btn>
                             </div>
                           )}
                         </Card>
@@ -3566,7 +2554,6 @@
                   </Btn>
                 </div>
 
-                {/* Currently Reading Hero Card */}
                 {currentBook && (
                   <Card style={{ background: "linear-gradient(145deg, rgba(232,196,160,0.09) 0%, rgba(18,20,28,0.85) 100%)", border: "1px solid rgba(232,196,160,0.22)" }}>
                     <div style={{ fontSize: 10, color: "var(--accent-gold)", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 700, marginBottom: 12 }}>
@@ -3590,35 +2577,15 @@
                         <div style={{ fontSize: 12, color: "#8E8A82", marginTop: 2 }}>
                           {currentBook.author}
                         </div>
-                        <div style={{ fontSize: 11, color: "#aaa", marginTop: 6 }}>
-                          Page {currentBook.read} of {currentBook.pages}
-                        </div>
                       </div>
-
-                      <div style={{ textAlign: "center", flexShrink: 0 }}>
-                        <div style={{ fontSize: 22, fontFamily: "var(--font-serif)", fontWeight: 700, color: "var(--accent-gold)" }}>
-                          {currentBook.streak}
-                        </div>
-                        <div style={{ fontSize: 9, color: "#8E8A82", textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                          day<br />streak
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "flex-end" }}>
-                      <Btn onClick={() => setModal("log_progress")} variant="solid" style={{ padding: "6px 14px", fontSize: 11 }}>
-                        📖 Log Reading Progress
-                      </Btn>
                     </div>
                   </Card>
                 )}
 
-                {/* Library books list */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {books.map((book, i) => (
+                  {books.map((book) => (
                     <div
                       key={book.id}
-                      onClick={() => setSelectedBook(book)}
                       style={{
                         background: "rgba(255,255,255,0.035)",
                         border: "1px solid rgba(255,255,255,0.07)",
@@ -3627,11 +2594,8 @@
                         display: "flex",
                         alignItems: "center",
                         gap: 14,
-                        cursor: "pointer",
-                        transition: "all 0.2s"
+                        cursor: "pointer"
                       }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(232,196,160,0.3)"}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"}
                     >
                       <div style={{ width: 42, height: 60, borderRadius: 8, flexShrink: 0, background: `linear-gradient(135deg, ${book.cover || "#2A2A2A"}, ${book.cover || "#2A2A2A"}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, boxShadow: `0 4px 12px ${book.cover || "#000"}44`, border: "1px solid rgba(255,255,255,0.12)" }}>
                         📗
@@ -3641,14 +2605,6 @@
                           {book.title}
                         </div>
                         <div style={{ fontSize: 12, color: "#8E8A82", marginTop: 2 }}>{book.author}</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-                          <Stars n={book.rating} size={11} />
-                          <Pill label={book.genre} color={GENRE_COLORS[book.genre]} />
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 11, color: "#666", textAlign: "right", flexShrink: 0 }}>
-                        <div>{book.pages}p</div>
-                        <div style={{ marginTop: 2 }}>{MONTH_NAMES[(book.month || 1) - 1]}</div>
                       </div>
                     </div>
                   ))}
@@ -3659,36 +2615,11 @@
             {/* ─── TAB 3: STATS ─── */}
             {tab === "stats" && (
               <div className="animate-slide-up" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <SectionHead>Reading Analytics & Goals</SectionHead>
-                  <Btn onClick={() => setModal("review")} variant="solid" style={{ padding: "6px 14px", fontSize: 11 }}>
-                    Share Card ✨
-                  </Btn>
-                </div>
-
-                <Card style={{ background: "linear-gradient(135deg, rgba(232,196,160,0.09) 0%, rgba(18,20,28,0.85) 100%)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <div style={{ fontSize: 12, color: "var(--accent-gold)", textTransform: "uppercase", letterSpacing: "1px", fontWeight: 600 }}>
-                      2026 Annual Reading Goal
-                    </div>
-                    <div style={{ fontSize: 13, color: "#aaa", fontWeight: 500 }}>
-                      {books.length} / {user?.goal || 12} books
-                    </div>
-                  </div>
-                  <div style={{ height: 10, background: "rgba(255,255,255,0.08)", borderRadius: 5, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.min((books.length / (user?.goal || 12)) * 100, 100)}%`, background: "linear-gradient(90deg, #E8C4A0, #A0E8B8)", borderRadius: 5, transition: "width 1s cubic-bezier(0.16, 1, 0.3, 1)" }} />
-                  </div>
-                  <div style={{ fontSize: 12, color: "#8E8A82", marginTop: 10 }}>
-                    {Math.round((books.length / (user?.goal || 12)) * 100)}% of goal completed · {Math.max(0, (user?.goal || 12) - books.length)} books to reach milestone
-                  </div>
-                </Card>
-
+                <SectionHead>Reading Analytics & Goals</SectionHead>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   {[
-                    { label: "Books Finished", value: books.length, sub: `Target: ${user?.goal || 12}`, color: "var(--accent-gold)" },
-                    { label: "Pages Logged", value: totalPages.toLocaleString(), sub: "~54 pages / day", color: "#A0C4E8" },
-                    { label: "Average Rating", value: `${(books.reduce((a, b) => a + (b.rating || 0), 0) / (books.length || 1)).toFixed(1)} ★`, sub: "High standards", color: "#F5C842" },
-                    { label: "Genres Explored", value: [...new Set(books.map(b => b.genre))].length, sub: "Well rounded", color: "#C4A0E8" },
+                    { label: "Books Finished", value: books.length, color: "var(--accent-gold)" },
+                    { label: "Pages Logged", value: totalPages.toLocaleString(), color: "#A0C4E8" },
                   ].map(s => (
                     <Card key={s.label} style={{ padding: "16px" }}>
                       <div style={{ fontSize: 26, fontFamily: "var(--font-serif)", fontWeight: 700, color: s.color }}>
@@ -3697,52 +2628,9 @@
                       <div style={{ fontSize: 10, color: "#777", textTransform: "uppercase", letterSpacing: "1px", margin: "4px 0 2px", fontWeight: 600 }}>
                         {s.label}
                       </div>
-                      <div style={{ fontSize: 11, color: "#555" }}>{s.sub}</div>
                     </Card>
                   ))}
                 </div>
-
-                <Card>
-                  <div style={{ fontSize: 11, color: "#8E8A82", textTransform: "uppercase", letterSpacing: "1.2px", marginBottom: 16, fontWeight: 600 }}>
-                    Books Read Per Month
-                  </div>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 75 }}>
-                    {MONTH_NAMES.slice(0, 8).map((m, i) => {
-                      const count = books.filter(b => b.month === i + 1).length;
-                      return (
-                        <div key={m} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                          <div
-                            style={{
-                              width: "100%",
-                              borderRadius: "4px 4px 0 0",
-                              height: count > 0 ? `${count * 20}px` : "4px",
-                              background: count > 0 ? "linear-gradient(180deg, #E8C4A0, #C4A070)" : "rgba(255,255,255,0.06)",
-                              transition: "height 0.6s ease"
-                            }}
-                          />
-                          <div style={{ fontSize: 9, color: "#777" }}>{m}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </Card>
-
-                <Card>
-                  <div style={{ fontSize: 11, color: "#8E8A82", textTransform: "uppercase", letterSpacing: "1.2px", marginBottom: 14, fontWeight: 600 }}>
-                    Genre Distribution
-                  </div>
-                  {Object.entries(books.reduce((a, b) => { a[b.genre] = (a[b.genre] || 0) + 1; return a; }, {}))
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([g, c]) => (
-                      <div key={g} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                        <div style={{ fontSize: 12, color: "#aaa", width: 84, flexShrink: 0 }}>{g}</div>
-                        <div style={{ flex: 1, height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}>
-                          <div style={{ height: "100%", borderRadius: 3, width: `${(c / books.length) * 100}%`, background: GENRE_COLORS[g] || "var(--accent-gold)" }} />
-                        </div>
-                        <div style={{ fontSize: 11, color: "#666", width: 20, textAlign: "right" }}>{c}</div>
-                      </div>
-                    ))}
-                </Card>
               </div>
             )}
 
@@ -3765,199 +2653,29 @@
                   </div>
                 </div>
 
-                <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "4px" }}>
-                  <button
-                    onClick={() => setMarketView("list")}
-                    style={{
-                      flex: 1,
-                      padding: "8px",
-                      borderRadius: 10,
-                      border: "none",
-                      cursor: "pointer",
-                      background: marketView === "list" ? "rgba(232,196,160,0.16)" : "transparent",
-                      color: marketView === "list" ? "var(--accent-gold)" : "#888",
-                      fontSize: 12,
-                      fontWeight: 600
-                    }}
-                  >
-                    📋 All Listings ({listings.length})
-                  </button>
-                  <button
-                    onClick={() => setMarketView("nearby")}
-                    style={{
-                      flex: 1,
-                      padding: "8px",
-                      borderRadius: 10,
-                      border: "none",
-                      cursor: "pointer",
-                      background: marketView === "nearby" ? "rgba(160,232,184,0.16)" : "transparent",
-                      color: marketView === "nearby" ? "#A0E8B8" : "#888",
-                      fontSize: 12,
-                      fontWeight: 600
-                    }}
-                  >
-                    📍 Near Me Map
-                  </button>
-                </div>
-
-                {marketView === "nearby" ? (
-                  <NearbyMapView
-                    listings={listings}
-                    onOffer={setOfferTarget}
-                    myOffers={myOffers}
-                  />
-                ) : (
-                  <>
-                    <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                      {[
-                        { v: "all", l: "All Items" },
-                        { v: "give", l: "🎁 Free Giveaway" },
-                        { v: "trade", l: "🎯 Specific Request" },
-                        { v: "open", l: "🔄 Open Trade" }
-                      ].map(f => (
-                        <button
-                          key={f.v}
-                          onClick={() => setMarketFilter(f.v)}
-                          style={{
-                            padding: "7px 14px",
-                            borderRadius: 20,
-                            fontSize: 12,
-                            cursor: "pointer",
-                            flexShrink: 0,
-                            border: `1px solid ${marketFilter === f.v ? "var(--accent-gold)" : "rgba(255,255,255,0.08)"}`,
-                            background: marketFilter === f.v ? "rgba(232,196,160,0.15)" : "rgba(255,255,255,0.03)",
-                            color: marketFilter === f.v ? "var(--accent-gold)" : "#8E8A82",
-                            fontWeight: marketFilter === f.v ? 600 : 400
-                          }}
-                        >
-                          {f.l}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                      {filteredListings.map(listing => (
-                        <Card key={listing.id} style={{ padding: 0, overflow: "hidden" }}>
-                          <div style={{ height: 3, background: listing.type === "give" ? "linear-gradient(90deg, #A0E8B8, #60C870)" : listing.type === "trade" ? "linear-gradient(90deg, #A0C4E8, #6090C0)" : "linear-gradient(90deg, #E8C4A0, #C4A070)" }} />
-                          <div style={{ padding: "16px" }}>
-                            <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
-                              <div style={{ width: 44, height: 60, borderRadius: 8, background: `linear-gradient(145deg, ${GENRE_COLORS[listing.genre] || "#555"}44, ${GENRE_COLORS[listing.genre] || "#555"}22)`, border: `1px solid ${GENRE_COLORS[listing.genre] || "#555"}44`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>
-                                📗
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 16, fontFamily: "var(--font-serif)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {listing.book}
-                                </div>
-                                <div style={{ fontSize: 12, color: "#8E8A82", marginTop: 2 }}>{listing.author}</div>
-                                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                                  <Pill label={listing.genre} />
-                                  <Pill label={listing.condition} />
-                                </div>
-                              </div>
-                              <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                <div style={{ fontSize: 10, color: "#666" }}>{listing.time}</div>
-                                <div style={{ fontSize: 11, color: "#aaa", marginTop: 3 }}>📍 {listing.location}</div>
-                                <div style={{ fontSize: 10, color: listing.canPost ? "#A0C4E8" : "#A0E8B8", marginTop: 3 }}>
-                                  {listing.canPost ? "post or meetup" : "meetup only"}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div style={{ marginBottom: 10 }}>
-                              <TypeBadge type={listing.type} wantGenre={listing.wantGenre} />
-                            </div>
-
-                            {listing.wantSpecific && (
-                              <div style={{ fontSize: 12, color: "#A0C4E8", marginBottom: 10, background: "rgba(160,196,232,0.08)", padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(160,196,232,0.18)" }}>
-                                Looking for: <span style={{ fontStyle: "italic" }}>"{listing.wantSpecific}"</span>
-                              </div>
-                            )}
-
-                            {listing.note && (
-                              <div style={{ fontSize: 12, color: "#9E988E", fontStyle: "italic", lineHeight: 1.6, marginBottom: 12 }}>
-                                "{listing.note}"
-                              </div>
-                            )}
-
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <Av ch={listing.owner[0]} bg={listing.ownerBg} size={28} />
-                                <div>
-                                  <div style={{ fontSize: 12, fontWeight: 500 }}>{listing.owner}</div>
-                                  <div style={{ fontSize: 10, color: "#666" }}>⭐ {listing.ownerKarma} karma</div>
-                                </div>
-                              </div>
-
-                              <div>
-                                {myOffers.has(listing.id) ? (
-                                  <div style={{ fontSize: 12, color: "#A0E8B8", padding: "6px 12px", background: "rgba(160,232,184,0.1)", borderRadius: 20, border: "1px solid rgba(160,232,184,0.25)", fontWeight: 500 }}>
-                                    ✓ Request Dispatched
-                                  </div>
-                                ) : (
-                                  <Btn
-                                    onClick={() => setOfferTarget(listing)}
-                                    variant={listing.type === "give" ? "solid" : "outline"}
-                                    style={{ padding: "7px 16px", fontSize: 12 }}
-                                  >
-                                    {listing.type === "give" ? "Request Copy 🎁" : "Make Offer 🤝"}
-                                  </Btn>
-                                )}
-                              </div>
-                            </div>
-                            <ReportButton contentId={listing.id} type="listing" />
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                <button
-                  onClick={() => setModal("list")}
-                  style={{
-                    background: "rgba(232,196,160,0.06)",
-                    border: "1px dashed rgba(232,196,160,0.3)",
-                    borderRadius: 18,
-                    padding: "22px",
-                    cursor: "pointer",
-                    width: "100%",
-                    textAlign: "center"
-                  }}
-                >
-                  <div style={{ fontSize: 26, marginBottom: 6 }}>📬</div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: "var(--accent-gold)" }}>
-                    List a Book from Your Shelf
-                  </div>
-                  <div style={{ fontSize: 12, color: "#8E8A82", marginTop: 4 }}>
-                    Free giveaway or swap for your next wishlist read
-                  </div>
-                </button>
-
-                <Card>
-                  <div style={{ fontSize: 11, color: "#8E8A82", textTransform: "uppercase", letterSpacing: "1.2px", marginBottom: 12, fontWeight: 600 }}>
-                    Top Community Karma This Month
-                  </div>
-                  {[
-                    { name: "Sophie L.", bg: "#B07090", karma: 38, books: 9 },
-                    { name: "Ben W.", bg: "#709070", karma: 24, books: 6 },
-                    { name: "Yuki T.", bg: "#507090", karma: 19, books: 5 },
-                  ].map((u, i) => (
-                    <div key={u.name} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: i < 2 ? 10 : 0 }}>
-                      <div style={{ fontSize: 13, color: "#666", width: 14, textAlign: "right", fontWeight: 700 }}>{i + 1}</div>
-                      <Av ch={u.name[0]} bg={u.bg} size={28} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{u.name}</div>
-                        <div style={{ fontSize: 11, color: "#666" }}>{u.books} books shared</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {filteredListings.map(listing => (
+                    <Card key={listing.id} style={{ padding: "16px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div>
+                          <div style={{ fontSize: 16, fontFamily: "var(--font-serif)", fontWeight: 700 }}>{listing.book}</div>
+                          <div style={{ fontSize: 12, color: "#8E8A82" }}>{listing.author} · 📍 {listing.location}</div>
+                        </div>
+                        <TypeBadge type={listing.type} />
                       </div>
-                      <div style={{ fontSize: 13, color: "var(--accent-gold)", fontWeight: 700 }}>⭐ {u.karma}</div>
-                    </div>
+                      <div style={{ marginTop: 12 }}>
+                        <Btn onClick={() => setOfferTarget(listing)} variant="solid" style={{ width: "100%" }}>
+                          {listing.type === "give" ? "Request Free Copy 🎁" : "Make Trade Offer 🤝"}
+                        </Btn>
+                      </div>
+                    </Card>
                   ))}
-                </Card>
+                </div>
               </div>
             )}
           </main>
 
-          {/* ─── MODALS & SHEETS ─── */}
+          {/* Modals & Sheets */}
           {modal === "add" && (
             <AddBookSheet
               onClose={() => setModal(null)}
@@ -3968,7 +2686,6 @@
                 } catch (e) {
                   setBooks(p => [{ ...b, id: Date.now() }, ...p]);
                 }
-                setUserKarma(k => k + 2);
               }}
             />
           )}
@@ -3989,87 +2706,9 @@
               trade={activeTradeRoom}
               currentUserId={user?.id || 1}
               onClose={() => setActiveTradeRoom(null)}
-              onTradeUpdated={updatedTrade => {
+              onTradeUpdated={() => {
                 setUserKarma(k => k + 5);
-                apiClient.getBooks().then(res => {
-                  if (res.books) setBooks(res.books);
-                }).catch(() => {});
-              }}
-            />
-          )}
-
-          {modal === "ai" && (
-            <AIRecsSheet
-              books={books}
-              userGenres={user?.genres || []}
-              onClose={() => setModal(null)}
-              onAddBook={async b => {
-                try {
-                  const res = await apiClient.addBook(b);
-                  setBooks(p => [res.book, ...p]);
-                } catch (e) {
-                  setBooks(p => [{ ...b, id: Date.now() }, ...p]);
-                }
-              }}
-            />
-          )}
-
-          {modal === "review" && (
-            <YearReview
-              books={books}
-              user={user}
-              onClose={() => setModal(null)}
-            />
-          )}
-
-          {modal === "list" && (
-            <ListMyBookSheet
-              myBooks={books}
-              userLocation={user?.location}
-              onClose={() => setModal(null)}
-              onList={l => {
-                setListings(p => [l, ...p]);
-                setUserKarma(k => k + 5);
-              }}
-            />
-          )}
-
-          {modal === "new_post" && (
-            <NewPostSheet
-              user={user}
-              books={books}
-              onClose={() => setModal(null)}
-              onPost={p => {
-                setFeedPosts(prev => [p, ...prev]);
-                setUserKarma(k => k + 3);
-              }}
-            />
-          )}
-
-          {modal === "log_progress" && (
-            <LogProgressSheet
-              currentBook={currentBook}
-              onClose={() => setModal(null)}
-              onUpdate={async updated => {
-                setCurrentBook(updated);
-                setUserKarma(k => k + 1);
-                const bookOnShelf = books.find(b => b.title === updated.title);
-                if (bookOnShelf) {
-                  apiClient.updateBook(bookOnShelf.id, { read: updated.read }).catch(() => {});
-                }
-              }}
-            />
-          )}
-
-          {offerTarget && (
-            <OfferSheet
-              listing={offerTarget}
-              onClose={() => setOfferTarget(null)}
-              onSubmit={async (id, offer) => {
-                setListings(p => p.map(l => l.id === id ? { ...l, offers: [...(l.offers || []), offer] } : l));
-                setMyOffers(p => new Set([...p, id]));
-                setUserKarma(k => k + 5);
-                setOfferTarget(null);
+                apiClient.getBooks().then(res => res.books && setBooks(res.books)).catch(() => {});
               }}
             />
           )}
@@ -4078,97 +2717,48 @@
             <CookiePreferencesModal
               preferences={user?.cookiePreferences || { essential: true, preferences: true, social: true, analytics: false }}
               onSave={async newPrefs => {
-                try {
-                  await apiClient.updateCookies(newPrefs);
-                  setUser(p => ({ ...p, cookiePreferences: newPrefs }));
-                } catch (e) {
-                  setUser(p => ({ ...p, cookiePreferences: newPrefs }));
-                }
+                await apiClient.updateCookies(newPrefs).catch(() => {});
+                setUser(p => ({ ...p, cookiePreferences: newPrefs }));
               }}
               onClose={() => setShowCookieSettings(false)}
             />
           )}
 
           {showProfile && (
-            <Sheet onClose={() => setShowProfile(false)} title="Reader Profile & Settings" subtitle="Preferences, reading statistics, and verified legal compliance">
+            <Sheet onClose={() => setShowProfile(false)} title="Reader Profile & Settings" subtitle="Book Nook PWA · Version 0.1">
               <div style={{ textAlign: "center", paddingBottom: 12 }}>
                 <div style={{ fontSize: 56, marginBottom: 8 }}>{user?.avatar || "📚"}</div>
                 <div style={{ fontSize: 20, fontFamily: "var(--font-serif)", fontWeight: 700 }}>{user?.name || "Reader"}</div>
                 <div style={{ fontSize: 13, color: "#8E8A82", marginTop: 3 }}>📍 {user?.location || "United Kingdom"} · {user?.country || "UK"}</div>
                 <div style={{ fontSize: 12, color: "var(--accent-gold)", fontWeight: 600, marginTop: 4 }}>⭐ {userKarma} Book Karma Points</div>
-
-                <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 20 }}>
-                  {[
-                    { v: books.length, l: "Books Read" },
-                    { v: `${user?.goal || 12}`, l: "Annual Goal" },
-                    { v: books.filter(b => b.rating === 5).length, l: "5★ Loved" }
-                  ].map(s => (
-                    <div key={s.l} style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 22, fontFamily: "var(--font-serif)", fontWeight: 700, color: "var(--accent-gold)" }}>{s.v}</div>
-                      <div style={{ fontSize: 10, color: "#777", textTransform: "uppercase", letterSpacing: "1px", marginTop: 2 }}>{s.l}</div>
-                    </div>
-                  ))}
-                </div>
               </div>
 
-              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "18px 0" }} />
-
-              <div style={{ background: "rgba(160,232,184,0.08)", border: "1px solid rgba(160,232,184,0.3)", borderRadius: 16, padding: "14px", marginBottom: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <div style={{ background: "rgba(160,232,184,0.08)", border: "1px solid rgba(160,232,184,0.3)", borderRadius: 16, padding: "14px", margin: "16px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                   <span style={{ fontSize: 18 }}>🛡️</span>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#A0E8B8" }}>
-                    Verified UK Legal Compliance
+                    Verified UK Legal Compliance (v0.1)
                   </div>
                 </div>
-                <div style={{ fontSize: 11, color: "#C4BDB2", lineHeight: 1.6 }}>
-                  ✓ <strong>Age Verification:</strong> Confirmed 13+ ({user?.ageBracket || "18+"} under UK Online Safety Act)<br />
-                  ✓ <strong>Terms & Conditions:</strong> Accepted on {user?.termsAcceptedAt ? new Date(user.termsAcceptedAt).toLocaleDateString() : "Registration"}<br />
-                  ✓ <strong>Privacy Policy:</strong> Accepted (UK GDPR / Data Protection Act 2018)<br />
-                  ✓ <strong>Cookie & Storage Policy:</strong> Approved (PECR compliant)
+                <div style={{ fontSize: 11, color: "#C4BDB2", lineHeight: 1.5 }}>
+                  Age confirmed 13+ (Online Safety Act) · UK GDPR & PECR Approved
                 </div>
-              </div>
-
-              <Label>Favorite Reading Genres</Label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
-                {(user?.genres || ["Fiction", "Sci-Fi", "Fantasy"]).map(g => (
-                  <Pill key={g} label={g} color="var(--accent-gold)" bg="rgba(232,196,160,0.12)" />
-                ))}
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <Btn
-                  onClick={() => {
-                    setShowCookieSettings(true);
-                  }}
-                  variant="outline"
-                  style={{ width: "100%" }}
-                >
+                <Btn onClick={() => setShowCookieSettings(true)} variant="outline" style={{ width: "100%" }}>
                   🍪 Customise Cookie & Storage Settings
                 </Btn>
-                <Btn
-                  onClick={() => {
-                    setShowProfile(false);
-                    setConsented(false);
-                  }}
-                  variant="ghost"
-                  style={{ width: "100%" }}
-                >
-                  ⚙️ Review Policies & Permissions
+                <Btn onClick={handleRefreshUpdate} variant="ghost" style={{ width: "100%" }}>
+                  🔄 Check for PWA Update (v0.1)
                 </Btn>
-                <Btn
-                  onClick={() => {
-                    apiClient.setToken(null);
-                    localStorage.removeItem(STORAGE_KEY);
-                    setAuthed(false);
-                    setConsented(false);
-                    setUser(null);
-                    setShowProfile(false);
-                  }}
-                  variant="danger"
-                  style={{ width: "100%" }}
-                >
+                <Btn onClick={() => { apiClient.setToken(null); localStorage.removeItem(STORAGE_KEY); setAuthed(false); setShowProfile(false); }} variant="danger" style={{ width: "100%" }}>
                   Sign Out & Clear Session
                 </Btn>
+              </div>
+
+              <div style={{ textAlign: "center", fontSize: 11, color: "#666", marginTop: 18 }}>
+                Book Nook PWA · Version 0.1 · Build 2026.1
               </div>
             </Sheet>
           )}

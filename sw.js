@@ -1,4 +1,4 @@
-const CACHE_NAME = 'booknook-v1.1.0';
+const CACHE_NAME = 'booknook-v0.1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -11,62 +11,86 @@ const STATIC_ASSETS = [
   'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js'
 ];
 
-// Install Event
+// Install Event: Cache critical shell assets and immediately skip waiting
 self.addEventListener('install', event => {
+  console.log(`[Book Nook PWA] Installing Service Worker ${CACHE_NAME}`);
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      console.log('[Book Nook SW] Caching app shell & static assets');
-      return cache.addAll(STATIC_ASSETS).catch(err => console.warn('[SW] Cache addAll notice:', err));
+      console.log('[Book Nook PWA] Caching app shell assets');
+      return cache.addAll(STATIC_ASSETS).catch(err => console.warn('[SW Cache Notice]:', err));
     })
   );
   self.skipWaiting();
 });
 
-// Activate Event - Clean old caches
+// Activate Event: Delete any old / previous caches and immediately claim all open clients
 self.addEventListener('activate', event => {
+  console.log(`[Book Nook PWA] Activating ${CACHE_NAME}`);
   event.waitUntil(
     caches.keys().then(keys => {
       return Promise.all(
         keys.map(key => {
           if (key !== CACHE_NAME) {
-            console.log('[Book Nook SW] Removing outdated cache:', key);
+            console.log('[Book Nook PWA] Purging outdated cache:', key);
             return caches.delete(key);
           }
         })
       );
+    }).then(() => {
+      console.log('[Book Nook PWA] Claiming clients for instant update');
+      return self.clients.claim();
     })
   );
-  self.clients.claim();
 });
 
-// Fetch Event - Stale-while-revalidate for assets, Network-first for API
+// Listen for explicit skipWaiting message
+self.addEventListener('message', event => {
+  if (event.data && event.data.action === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+// Fetch Event: Network-first for HTML and API to guarantee fresh versions, Stale-while-revalidate for CDN/images
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // For API calls, try Network first, fallback to offline response if disconnected
+  // 1. API Calls: Network First
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          return new Response(JSON.stringify({ error: 'Offline mode: changes will sync when connected.' }), {
-            headers: { 'Content-Type': 'application/json' },
-            status: 503
-          });
-        })
+      fetch(event.request).catch(() => {
+        return new Response(JSON.stringify({ error: 'Offline mode: changes will sync when connected.' }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 503
+        });
+      })
     );
     return;
   }
 
-  // For Static Assets & Navigation, use Stale-While-Revalidate
+  // 2. Main Page / HTML: Network-first with Cache fallback to ensure users always receive latest v0.1 UI
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(networkResponse => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then(c => c.put(event.request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request).then(cached => cached || caches.match('/index.html')))
+    );
+    return;
+  }
+
+  // 3. Static Assets & CDN: Cache-first / Stale-while-revalidate
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
       const fetchPromise = fetch(event.request)
         .then(networkResponse => {
           if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseToCache);
-            });
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then(c => c.put(event.request, copy));
           }
           return networkResponse;
         })
