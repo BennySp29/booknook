@@ -36,7 +36,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
     app: 'Book Nook API',
-    version: '1.2.0',
+    version: '0.1.0',
     timestamp: new Date().toISOString()
   });
 });
@@ -54,11 +54,16 @@ app.use((err, req, res, next) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`\n==============================================`);
-  console.log(`📚 Book Nook Server running at http://localhost:${PORT}`);
-  console.log(`🚀 API Endpoints available under http://localhost:${PORT}/api/`);
-  console.log(`💬 Live Trade Chat & Logistics initialized!`);
-  console.log(`✨ Ready for reading, tracking, and book exchanges!`);
-  console.log(`==============================================\n`);
-});
+// Only listen directly when not executed as serverless function
+if (require.main === module || !process.env.VERCEL) {
+  server.listen(PORT, () => {
+    console.log(`\n==============================================`);
+    console.log(`📚 Book Nook Server running at http://localhost:${PORT}`);
+    console.log(`🚀 API Endpoints available under http://localhost:${PORT}/api/`);
+    console.log(`💬 Live Trade Chat & Logistics initialized!`);
+    console.log(`✨ Ready for reading, tracking, and book exchanges!`);
+    console.log(`==============================================\n`);
+  });
+}
+
+module.exports = app;
