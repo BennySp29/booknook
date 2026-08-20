@@ -3,9 +3,6 @@
   "version": "0.1.0",
   "description": "Your reading life, beautifully tracked and connected to local book lovers.",
   "main": "server.js",
-  "engines": {
-    "node": ">=22.x"
-  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
